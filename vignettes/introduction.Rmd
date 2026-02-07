@@ -1,0 +1,96 @@
+---
+title: "Introduction to sshist"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to sshist}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7, 
+  fig.height = 3.5
+)
+```
+The `sshist` package provides a fast and robust method for selecting the optimal number of bins for histograms. It implements the algorithm developed by Shimazaki and Shinomoto (2007), which minimizes the expected L2 loss function between the histogram and the unknown underlying density function.
+
+This method is particularly superior to standard rules (like Sturges or Freedman-Diaconis) when the data exhibits:
+
+  - Multimodal structures.
+  - Time-dependent rate changes (e.g., in neuroscience).
+  - Complex 2D distributions.
+
+```{r setup}
+library(sshist)
+```
+
+## 1. One-Dimensional Optimization
+
+Let's look at the classic "Old Faithful" geyser data. It has two distinct modes (short and long eruptions).
+
+### Standard Approach vs. sshist
+
+Standard histograms often hide the structure if the bin width is not chosen carefully.
+
+```{r comparision}
+data(faithful)
+x_data <- faithful$eruptions
+
+# 1. Standard R histogram (Sturges rule by default)
+par(mfrow = c(1, 2))
+hist(x_data, main = "Standard hist()", xlab = "Duration of Eruptions", col = "gray90")
+
+# 2. Shimazaki-Shinomoto Optimization
+# The function returns an S3 object with optimal parameters
+res <- sshist(x_data)
+hist(x_data, breaks=res$edges,
+       main=paste("Optimal Hist (N=", res$opt_n, ")"),
+       xlab = "Duration of Eruptions", col = "gray90")
+
+par(mfrow = c(1, 1))
+```
+
+As you can see, `sshist` automatically detects the bimodal nature and sharp peaks much better than the conservative default.
+
+### Accessing Parameters
+
+You can extract the optimal number of bins (opt_n) or bin width (opt_d) to use in other plotting libraries like ggplot2.
+
+```{r optimal params}
+print(res)
+
+# The plot method shows the Cost Function Graph and the Optimal Histogram
+plot(res)
+```
+
+The left plot shows the cost function graph. The red dot indicates the global minimum (optimal binning). The right plot shows the resulting histogram.
+
+## 2. Two-Dimensional Optimization
+
+`sshist` also supports 2D histograms, solving the problem of choosing bin sizes for X and Y axes simultaneously.
+
+```{r sshist_2d}
+# Run 2D optimization
+# This calculates the cost function for a grid of (Nx, Ny) combinations
+res_2d <- sshist_2d(iris$Petal.Length, iris$Petal.Width)
+
+# optimal number of bins
+print(res_2d)
+
+# The plot method shows the Cost Function Landscape and the Optimal Histogram
+plot(res_2d)
+```
+
+The left plot shows the cost function landscape. The red dot indicates the global minimum (optimal binning). The right plot shows the resulting histogram.
+
+## Performance
+
+The core cost function calculation is implemented in C++ (via Rcpp) and parallelized with OpenMP where possible, making it efficient even for large datasets or dense grid searches in 2D.
+
+## References
+
+- Shimazaki, H. and Shinomoto, S., 2007. A method for selecting the bin size of a time histogram. Neural Computation, 19(6), pp.1503-1527. [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
+- https://www.neuralengine.org/res/histogram.html
