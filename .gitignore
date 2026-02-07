@@ -1,0 +1,12 @@
+git .Rproj.user
+inst/doc
+.Rhistory
+.RData
+src/*.o
+src/*.so
+src/*.dll
+.httr-oauth
+.DS_Store
+.quarto
+.Rproj.user
+cran-comments.md
