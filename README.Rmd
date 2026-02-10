@@ -30,11 +30,16 @@ Unlike the standard Freedman-Diaconis rule (used by default in ggplot2), this me
 
 ## Installation
 
+```{r, eval=FALSE}
+# stable version from CRAN
+install.packages("sshist")
+``` 
+
 You can install the development version of sshist like so:
 
-``` r
-  # install.packages("devtools")
-  devtools::install_github("yourusername/sshist")
+``` {r, eval=FALSE}
+# install.packages("devtools")
+devtools::install_github("celebithil/sshist")
 ```
 
 ## Example 1: Basic 1D Usage

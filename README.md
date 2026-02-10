@@ -27,11 +27,16 @@ particularly effective for:
 
 ## Installation
 
+``` r
+# stable version from CRAN
+install.packages("sshist")
+```
+
 You can install the development version of sshist like so:
 
 ``` r
-  # install.packages("devtools")
-  devtools::install_github("yourusername/sshist")
+# install.packages("devtools")
+devtools::install_github("celebithil/sshist")
 ```
 
 ## Example 1: Basic 1D Usage

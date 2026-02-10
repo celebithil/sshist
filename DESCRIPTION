@@ -1,7 +1,7 @@
 Type: Package
 Package: sshist
 Title: Optimal Histogram Binning Using Shimazaki-Shinomoto Method
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: 
     person("Daniil", "Popov", , "popov.daniil@gmail.com", role = c("aut", "cre"))
 Description: Implements the Shimazaki-Shinomoto method (2007)
