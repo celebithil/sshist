@@ -11,6 +11,12 @@
 
 \item{...}{Additional arguments passed to print.}
 }
+\value{
+Returns the input object \code{x} invisibly. The method is called for its
+side effect of printing a summary of the Shimazaki-Shinomoto histogram
+optimization results, including the optimal number of bins, bin width, and
+minimum cost value.
+}
 \description{
 Print method for sshist objects
 }

@@ -1,18 +1,18 @@
 Type: Package
 Package: sshist
 Title: Optimal Histogram Binning Using Shimazaki-Shinomoto Method
-Version: 0.1.1
+Version: 0.1.2
 Authors@R: 
     person("Daniil", "Popov", , "popov.daniil@gmail.com", role = c("aut", "cre"))
-Description: Implements the Shimazaki-Shinomoto method (2007)
-    <doi:10.1162/neco.2007.19.6.1503> for optimizing the bin width of a
-    histogram. This method minimizes the mean integrated squared error
-    (MISE) and features a C++ backend for high performance and
-    shift-averaging to remove edge-position bias. Ideally suits for
-    time-dependent rate estimation and identifying intrinsic data
-    structures. Supports both 1D and 2D data distributions.
+Description: Implements the Shimazaki-Shinomoto method for optimizing the 
+    bin width of a histogram. This method minimizes the mean integrated 
+    squared error (MISE) and features a 'C++' backend for high performance 
+    and shift-averaging to remove edge-position bias. Ideally suits for 
+    time-dependent rate estimation and identifying intrinsic data structures. 
+    Supports both 1D and 2D data distributions. For more details see
+    Shimazaki and Shinomoto (2007) "A Method for Selecting the Bin Size of a Time Histogram" <doi:10.1162/neco.2007.19.6.1503>.
 License: GPL (>= 3)
-URL: https://github.com/celebithil/sshist,
+URL: https://github.com/celebithil/sshist, 
     https://www.neuralengine.org/res/histogram.html
 BugReports: https://github.com/celebithil/sshist/issues
 Imports: 

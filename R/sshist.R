@@ -252,6 +252,9 @@ sshist_2d <- function(x, y = NULL, n_min = 2, n_max = 200) {
 #' @export
 #' @param x An object of class sshist.
 #' @param ... Additional arguments passed to plot.
+#' @return No return value, called for side effects. Creates a two-panel plot showing:
+#'   (1) the cost function curve with the optimal number of bins highlighted, and
+#'   (2) the optimal histogram with the selected bin edges.
 plot.sshist <- function(x, ...) {
   old_par <- par(mfrow=c(1,2))
   on.exit(par(old_par))
@@ -273,18 +276,27 @@ plot.sshist <- function(x, ...) {
 #' @export
 #' @param x An object of class sshist.
 #' @param ... Additional arguments passed to print.
+#' @return Returns the input object \code{x} invisibly. The method is called for its
+#'   side effect of printing a summary of the Shimazaki-Shinomoto histogram
+#'   optimization results, including the optimal number of bins, bin width, and
+#'   minimum cost value.
 print.sshist <- function(x, ...) {
   cat("Shimazaki-Shinomoto Histogram Optimization\n")
   cat("------------------------------------------\n")
   cat("Optimal Bins (N):", x$opt_n, "\n")
   cat("Bin Width (D):   ", format(x$opt_d, digits=4), "\n")
   cat("Cost Minimum:    ", format(min(x$cost), digits=4), "\n")
+  invisible(x)
 }
 
 #' Plot method for sshist_2d objects
 #' @export
 #' @param x An object of class sshist.
 #' @param ... Additional arguments passed to plot.
+#' @return No return value, called for side effects. Creates a two-panel plot showing:
+#'   (1) a heatmap of the cost function landscape across different bin combinations
+#'   with the optimal point highlighted in red, and (2) the optimal 2D histogram
+#'   visualization using the selected bin numbers for both dimensions.
 plot.sshist_2d <- function(x, ...) {
   nx <- x$opt_nx
   ny <- x$opt_ny
@@ -318,6 +330,10 @@ plot.sshist_2d <- function(x, ...) {
 #' @export
 #' @param x An object of class sshist.
 #' @param ... Additional arguments passed to print.
+#' @return Returns the input object \code{x} invisibly. The method is called for its
+#'   side effect of printing a summary of the 2D Shimazaki-Shinomoto histogram
+#'   optimization results, including the optimal number of bins for both X and Y
+#'   dimensions, bin widths, and minimum cost value.
 print.sshist_2d <- function(x, ...) {
   cat("Shimazaki-Shinomoto 2D Histogram Optimization\n")
   cat("---------------------------------------------\n")
@@ -326,4 +342,5 @@ print.sshist_2d <- function(x, ...) {
   cat("Bin Width X:     ", format(x$opt_dx, digits=4), "\n")
   cat("Bin Width Y:     ", format(x$opt_dy, digits=4), "\n")
   cat("Cost Minimum:    ", format(x$min_cost, digits=4), "\n")
+  invisible(x)
 }

@@ -11,6 +11,11 @@
 
 \item{...}{Additional arguments passed to plot.}
 }
+\value{
+No return value, called for side effects. Creates a two-panel plot showing:
+(1) the cost function curve with the optimal number of bins highlighted, and
+(2) the optimal histogram with the selected bin edges.
+}
 \description{
 Plot method for sshist objects
 }

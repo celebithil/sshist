@@ -11,6 +11,12 @@
 
 \item{...}{Additional arguments passed to plot.}
 }
+\value{
+No return value, called for side effects. Creates a two-panel plot showing:
+(1) a heatmap of the cost function landscape across different bin combinations
+with the optimal point highlighted in red, and (2) the optimal 2D histogram
+visualization using the selected bin numbers for both dimensions.
+}
 \description{
 Plot method for sshist_2d objects
 }
