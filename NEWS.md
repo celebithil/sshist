@@ -1,3 +1,16 @@
+# sshist 0.1.3
+
+## Algorithm Improvements
+
+*   Updated the binning resolution limit formula to `N_max = Range / (2 * Min_Resolution)` to prevent the "comb effect" (sampling artifacts). This change aligns the R implementation with the author's reference Python logic and FAQ.
+*   The `n_max` parameter in `sshist()` is now strictly bounded by the resolution limit to prevent overfitting.
+
+## Documentation & Metadata
+
+*   Updated `README.md` and `README.Rmd` with new references and CRAN download badges.
+*   Adjusted the example output in the README to reflect the new algorithm logic.
+*   Updated `DESCRIPTION` file with refined URL indentation for better compliance.
+
 # sshist 0.1.2
 
 ## CRAN Submission Fixes
