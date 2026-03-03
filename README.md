@@ -6,7 +6,13 @@
 [![CRAN
 status](https://www.r-pkg.org/badges/version/sshist)](https://CRAN.R-project.org/package=sshist)
 [![CRAN
+downloads](https://cranlogs.r-pkg.org/badges/grand-total/sshist)](https://CRAN.R-project.org/package=sshist)
+[![CRAN
 downloads](https://cranlogs.r-pkg.org/badges/sshist)](https://CRAN.R-project.org/package=sshist)
+[![CRAN
+downloads](https://cranlogs.r-pkg.org/badges/last-week/sshist)](https://CRAN.R-project.org/package=sshist)
+[![CRAN
+downloads](https://cranlogs.r-pkg.org/badges/last-day/sshist)](https://CRAN.R-project.org/package=sshist)
 [![Ask
 DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/celebithil/sshist)
 <!-- badges: end -->
@@ -57,9 +63,9 @@ res <- sshist(x_data)
 print(res)
 #> Shimazaki-Shinomoto Histogram Optimization
 #> ------------------------------------------
-#> Optimal Bins (N): 37 
-#> Bin Width (D):    1.432 
-#> Cost Minimum:     -9.681
+#> Optimal Bins (N): 21
+#> Bin Width (D):    2.524
+#> Cost Minimum:     -8.525
 
 hist(res$data, breaks=res$edges, freq=FALSE,
        main=paste("Optimal Hist (N=", res$opt_n, ")"),
@@ -145,3 +151,5 @@ ggplot(faithful, aes(waiting, eruptions)) +
   size of a time histogram. Neural Computation, 19(6), pp.1503-1527.
   [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
 - <https://www.neuralengine.org/res/histogram.html>
+- <https://github.com/shimazaki/density_estimation>
+- <https://s-shinomoto.com/toolbox/sshist/hist.html>
