@@ -14,7 +14,10 @@ knitr::opts_chunk$set(
 ```
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/sshist)](https://CRAN.R-project.org/package=sshist)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/grand-total/sshist)](https://CRAN.R-project.org/package=sshist)
 [![CRAN downloads](https://cranlogs.r-pkg.org/badges/sshist)](https://CRAN.R-project.org/package=sshist)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/last-week/sshist)](https://CRAN.R-project.org/package=sshist)
+[![CRAN downloads](https://cranlogs.r-pkg.org/badges/last-day/sshist)](https://CRAN.R-project.org/package=sshist)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/celebithil/sshist)
 <!-- badges: end -->
 
@@ -126,3 +129,5 @@ ggplot(faithful, aes(waiting, eruptions)) +
 
 - Shimazaki, H. and Shinomoto, S., 2007. A method for selecting the bin size of a time histogram. Neural Computation, 19(6), pp.1503-1527. [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
 - https://www.neuralengine.org/res/histogram.html
+- https://github.com/shimazaki/density_estimation
+- https://s-shinomoto.com/toolbox/sshist/hist.html

@@ -66,17 +66,17 @@ sshist <- function(x, n_max = NULL, sn = 30) {
 
   dx_min <- min(abs(diff(x_unique)))
 
-  # Sampling Resolution limit
-  # As per FAQ: "Do not search the bin width smaller than the resolution."
-  # N_max = Range / Min_Bin_Width
-  n_limit_resolution <- floor((x_max - x_min) / dx_min)
+  # Sampling Resolution limit (Protection against comb effect)
+  # N_max = Range / (2 * Min_Resolution)
+  # This matches the reference Python logic: min(floor(Range / (2*dx)), max(N))
+  n_limit_resolution <- floor((x_max - x_min) / (2 * dx_min))
 
   if (is.null(n_max)) {
     # Default cap: smallest of (500, Resolution Limit, Sample Size)
     n_stop <- min(500, n_limit_resolution, n_samples)
   } else {
-    # User override, but still bounded by sample size (cannot have more bins than data points)
-    n_stop <- min(n_max, n_samples)
+    # User override, but MUST still be bounded by resolution limit and sample size
+    n_stop <- min(n_max, n_limit_resolution, n_samples)
   }
 
   if (n_stop < 2) n_stop <- 2
@@ -171,9 +171,9 @@ sshist_2d <- function(x, y = NULL, n_min = 2, n_max = 200) {
   dy_min <- get_resolution(y)
 
   # Calculate limits based on resolution (FAQ compliance)
-  # N_max = Range / Min_Bin_Width
-  limit_nx <- floor((x_max - x_min) / dx_min)
-  limit_ny <- floor((y_max - y_min) / dy_min)
+  # N_max = Range / (2 * Min_Bin_Width)
+  limit_nx <- floor((x_max - x_min) / (2 * dx_min))
+  limit_ny <- floor((y_max - y_min) / (2 * dy_min))
 
   # Adjust n_max if resolution is too coarse
   actual_n_max_x <- min(n_max, limit_nx)
