@@ -4,42 +4,50 @@
 \alias{sshist_2d}
 \title{Optimal 2D Histogram Binning (Shimazaki-Shinomoto Method)}
 \usage{
-sshist_2d(x, y = NULL, n_min = 2, n_max = 200)
+sshist_2d(x, y = NULL, n_min = 2L, n_max = 200L)
 }
 \arguments{
-\item{x}{Numeric vector (coord X) or a 2-column matrix.}
+\item{x}{Numeric vector (X coordinates) or a 2-column matrix/data.frame.}
 
-\item{y}{Numeric vector (coord Y). Optional if x is a matrix.}
+\item{y}{Numeric vector (Y coordinates). Ignored if \code{x} is a matrix.}
 
-\item{n_min}{Integer. Minimum number of bins (default 2).}
+\item{n_min}{Integer. Minimum number of bins per axis (default \code{2}).}
 
-\item{n_max}{Integer. Maximum number of bins (default 200).
-Algorithm will reduce this automatically if data resolution restricts it.}
+\item{n_max}{Integer or \code{NULL}. Maximum number of bins per axis
+(default \code{200}). Automatically clamped to the data resolution limit
+and the sample size.}
 }
 \value{
-An object of class \code{"sshist_2d"} containing optimal parameters.
+An object of class \code{"sshist_2d"} containing:
+\describe{
+\item{\code{opt_nx}, \code{opt_ny}}{Optimal bin counts.}
+\item{\code{opt_dx}, \code{opt_dy}}{Optimal bin widths.}
+\item{\code{data}}{Cleaned input data.}
+}
 }
 \description{
-Computes the optimal number of bins for a 2-dimensional histogram.
-Includes checks for data resolution and biased variance calculation.
+Computes the optimal number of bins for a 2-dimensional histogram using the
+Shimazaki-Shinomoto (2007) cost function.
 }
 \examples{
-# 1. Basic usage with base graphics
 set.seed(42)
-x <- rnorm(500)
-y <- rnorm(500)
+x <- rnorm(500); y <- rnorm(500)
+
 res <- sshist_2d(x, y)
 plot(res)
 
-# 2. Usage with ggplot2
+# ggplot2
 if (requireNamespace("ggplot2", quietly = TRUE)) {
   library(ggplot2)
-  df <- data.frame(x = x, y = y)
-
-  ggplot(df, aes(x = x, y = y)) +
+  ggplot(data.frame(x = x, y = y), aes(x, y)) +
     geom_bin2d(bins = c(res$opt_nx, res$opt_ny)) +
     scale_fill_viridis_c() +
-    ggtitle(paste0("Optimal 2D Bins: ", res$opt_nx, "x", res$opt_ny)) +
+    ggtitle(sprintf("Optimal 2D Bins: \%dx\%d", res$opt_nx, res$opt_ny)) +
     theme_minimal()
 }
+}
+\references{
+Shimazaki, H. and Shinomoto, S. (2007). A method for selecting the bin size
+of a time histogram. \emph{Neural Computation}, \strong{19}(6), 1503-1527.
+\doi{10.1162/neco.2007.19.6.1503}
 }

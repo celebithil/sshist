@@ -8,3 +8,7 @@
 ^cran-comments\.md$
 ^dev$
 ^CRAN-SUBMISSION$
+^\.positai$
+^\.claude$
+^doc$
+^Meta$

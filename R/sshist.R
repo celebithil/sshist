@@ -1,328 +1,388 @@
 #' Optimal Histogram Binning (Shimazaki-Shinomoto Method)
 #'
-#' Computes the optimal bin width and number of bins using the Shimazaki-Shinomoto
-#' method. This implementation uses Rcpp for high performance and includes
-#' shift-averaging to remove edge-position bias.
+#' Computes the optimal bin width and number of bins using the
+#' Shimazaki-Shinomoto (2007) method. This implementation performs an
+#' exhaustive search over candidate bin counts, exactly matching the
+#' original Python/MATLAB reference algorithms.
 #'
-#' @param x A numeric vector of data. Missing values (NA) will be removed.
-#' @param n_max An integer specifying the maximum number of bins to test.
-#'   If \code{NULL} (default), it is automatically determined based on data resolution
-#'   and sample size to prevent overfitting.
-#' @param sn Integer. The number of shifts to use for averaging (default is 30).
+#' @param x   A numeric vector of data. \code{NA} values are silently removed.
+#' @param n_max Integer or \code{NULL}. Maximum number of bins to consider.
+#'   When \code{NULL} (default) the limit is set automatically as
+#'   \code{min(500, floor(range / (2 * min_resolution)), n_samples)}.
+#' @param sn  Integer. Number of histogram shifts used in the shift-average
+#'   (default \code{30}).
+#' @param ncores Integer. Number of OpenMP threads to use. Defaults to 1 for CRAN compliance.
 #'
-#' @return An object of class \code{"sshist"} containing:
+#' @return An object of class \code{"sshist"} (a named list) containing:
 #' \describe{
-#'   \item{opt_n}{The optimal number of bins.}
-#'   \item{opt_d}{The optimal bin width.}
-#'   \item{edges}{The sequence of break points for the optimal histogram.}
-#'   \item{cost}{A numeric vector of the cost function values.}
-#'   \item{n_tested}{The vector of N values tested.}
-#'   \item{data}{The original data (cleaned).}
+#'   \item{\code{opt_n}}{Optimal number of bins (integer).}
+#'   \item{\code{opt_d}}{Optimal bin width (\eqn{= \mathrm{range} / N_{\mathrm{opt}}}).}
+#'   \item{\code{edges}}{Numeric vector of \eqn{N_{\mathrm{opt}} + 1} break
+#'     points for the optimal histogram.}
+#'   \item{\code{data}}{Cleaned (NA-removed) input data.}
 #' }
 #'
 #' @references
-#' Shimazaki, H. and Shinomoto, S., 2007. A method for selecting the bin size of a time histogram.
-#' \emph{Neural Computation}, 19(6), pp.1503-1527.
+#' Shimazaki, H. and Shinomoto, S. (2007). A method for selecting the bin size
+#' of a time histogram. \emph{Neural Computation}, \strong{19}(6), 1503–1527.
 #'
-#' @useDynLib sshist, .registration = TRUE
-#' @importFrom Rcpp sourceCpp
-#' @importFrom graphics hist rug points lines par grid image box
-#' @importFrom stats na.omit
-#' @importFrom grDevices terrain.colors hcl.colors
 #' @export
-#'
-#' @examples
-#' # 1. Basic usage with base graphics
-#' data(faithful)
-#' res <- sshist(faithful$waiting)
-#' plot(res)
-#'
-#' # 2. Usage with ggplot2
-#' if (requireNamespace("ggplot2", quietly = TRUE)) {
-#'   library(ggplot2)
-#'   df <- data.frame(waiting = faithful$waiting)
-#'
-#'   ggplot(df, aes(x = waiting)) +
-#'     geom_histogram(breaks = res$edges, fill = "lightblue", color = "black") +
-#'     ggtitle(paste("Optimal Shimazaki-Shinomoto Bins (N =", res$opt_n, ")")) +
-#'     theme_minimal()
-#' }
-sshist <- function(x, n_max = NULL, sn = 30) {
+sshist <- function(x, n_max = NULL, sn = 30, ncores = getOption("sshist.ncores", 1L)) {
 
-  if (!is.numeric(x)) stop("Data 'x' must be numeric.")
+  # ── Input validation ──────────────────────────────────────────────────────
+  if (!is.numeric(x)) stop("'x' must be a numeric vector.")
   x <- as.numeric(na.omit(x))
   n_samples <- length(x)
-
-  if (n_samples < 2) stop("Need at least 2 data points.")
+  if (n_samples < 2L) stop("At least 2 non-missing data points are required.")
 
   x_min <- min(x)
   x_max <- max(x)
+  range_x <- x_max - x_min
 
-  # --- 1. Resolution Check (Anti-Comb Effect) ---
+  # ── Resolution guard (anti-comb effect) ───────────────────────────────────
   x_unique <- sort(unique(x))
-
-  # Protect against constant data
-  if (length(x_unique) < 2) stop("Data is constant.")
-
-  dx_min <- min(abs(diff(x_unique)))
+  if (length(x_unique) < 2L) stop("Data are constant (all values identical).")
+  dx_min <- min(diff(x_unique))
 
   # Sampling Resolution limit (Protection against comb effect)
   # N_max = Range / (2 * Min_Resolution)
-  # This matches the reference Python logic: min(floor(Range / (2*dx)), max(N))
-  n_limit_resolution <- floor((x_max - x_min) / (2 * dx_min))
+  # This matches the reference Python logic: min(floor(Range / (2 * dx_min)), max(N))
+  n_limit_resolution <- floor(range_x / (2 * dx_min))
 
-  if (is.null(n_max)) {
+  # ── N bounds ──────────────────────────────────────────────────────────────
+  N_MIN <- 2L
+
+  N_MAX <- if (is.null(n_max)) {
     # Default cap: smallest of (500, Resolution Limit, Sample Size)
-    n_stop <- min(500, n_limit_resolution, n_samples)
+    min(500L, n_limit_resolution, n_samples)
   } else {
+    if (!is.numeric(n_max) || n_max < 1)
+      stop("'n_max' must be a positive integer or NULL.")
     # User override, but MUST still be bounded by resolution limit and sample size
-    n_stop <- min(n_max, n_limit_resolution, n_samples)
+    min(as.integer(n_max), n_limit_resolution, n_samples)
   }
 
-  if (n_stop < 2) n_stop <- 2
+  if (N_MAX < N_MIN) N_MAX <- N_MIN
 
-  n_vector <- 2:n_stop
+  # ── Exhaustive Search over N (matches Python/MATLAB references) ───────────
+  N_vec <- N_MIN:N_MAX
+  D_vec <- range_x / N_vec
 
-  # --- 2. C++ Calculation ---
-  costs <- sshist_cost_cpp(x, n_vector, sn, x_min, x_max)
+  # sshist_cost_cpp processes the vector of N values and returns the mean costs
+  C_vec <- sshist_cost_cpp(x, N_vec, sn, x_min, x_max, ncores)
 
-  # --- 3. Result Construction ---
-  idx_min <- which.min(costs)
-  opt_n   <- n_vector[idx_min]
-  opt_d   <- (x_max - x_min) / opt_n
-  edges   <- seq(x_min, x_max, length.out = opt_n + 1)
+  # ── Find Optimum ──────────────────────────────────────────────────────────
+  idx <- which.min(C_vec)
+  opt_n <- N_vec[idx]
+  opt_d <- D_vec[idx]
+  edges <- seq(x_min, x_max, length.out = opt_n + 1L)
 
-  res <- list(
-    opt_n    = opt_n,
-    opt_d    = opt_d,
-    edges    = edges,
-    cost     = costs,
-    n_tested = n_vector,
-    data     = x
+  # ── Return ────────────────────────────────────────────────────────────────
+  structure(
+    list(opt_n = opt_n,
+         opt_d = opt_d,
+         edges = edges,
+         data  = x
+    ),
+    class = "sshist"
   )
-  class(res) <- "sshist"
-  return(res)
 }
 
 #' Optimal 2D Histogram Binning (Shimazaki-Shinomoto Method)
 #'
-#' Computes the optimal number of bins for a 2-dimensional histogram.
-#' Includes checks for data resolution and biased variance calculation.
+#' Computes the optimal number of bins for a 2-dimensional histogram using the
+#' Shimazaki-Shinomoto (2007) cost function.
 #'
-#' @param x Numeric vector (coord X) or a 2-column matrix.
-#' @param y Numeric vector (coord Y). Optional if x is a matrix.
-#' @param n_min Integer. Minimum number of bins (default 2).
-#' @param n_max Integer. Maximum number of bins (default 200).
-#'              Algorithm will reduce this automatically if data resolution restricts it.
-#' @return An object of class \code{"sshist_2d"} containing optimal parameters.
+#' @param x Numeric vector (X coordinates) or a 2-column matrix/data.frame.
+#' @param y Numeric vector (Y coordinates). Ignored if \code{x} is a matrix.
+#' @param n_min Integer. Minimum number of bins per axis (default \code{2}).
+#' @param n_max Integer or \code{NULL}. Maximum number of bins per axis
+#'   (default \code{200}). Automatically clamped to the data resolution limit
+#'   and the sample size.
+#'
+#' @return An object of class \code{"sshist_2d"} containing:
+#' \describe{
+#'   \item{\code{opt_nx}, \code{opt_ny}}{Optimal bin counts.}
+#'   \item{\code{opt_dx}, \code{opt_dy}}{Optimal bin widths.}
+#'   \item{\code{data}}{Cleaned input data.}
+#' }
+#'
+#' @references
+#' Shimazaki, H. and Shinomoto, S. (2007). A method for selecting the bin size
+#' of a time histogram. \emph{Neural Computation}, \strong{19}(6), 1503-1527.
+#' \doi{10.1162/neco.2007.19.6.1503}
+#'
+#' @importFrom stats na.omit optimize
 #' @export
 #'
 #' @examples
-#' # 1. Basic usage with base graphics
 #' set.seed(42)
-#' x <- rnorm(500)
-#' y <- rnorm(500)
+#' x <- rnorm(500); y <- rnorm(500)
+#'
 #' res <- sshist_2d(x, y)
 #' plot(res)
 #'
-#' # 2. Usage with ggplot2
+#' # ggplot2
 #' if (requireNamespace("ggplot2", quietly = TRUE)) {
 #'   library(ggplot2)
-#'   df <- data.frame(x = x, y = y)
-#'
-#'   ggplot(df, aes(x = x, y = y)) +
+#'   ggplot(data.frame(x = x, y = y), aes(x, y)) +
 #'     geom_bin2d(bins = c(res$opt_nx, res$opt_ny)) +
 #'     scale_fill_viridis_c() +
-#'     ggtitle(paste0("Optimal 2D Bins: ", res$opt_nx, "x", res$opt_ny)) +
+#'     ggtitle(sprintf("Optimal 2D Bins: %dx%d", res$opt_nx, res$opt_ny)) +
 #'     theme_minimal()
 #' }
-sshist_2d <- function(x, y = NULL, n_min = 2, n_max = 200) {
+sshist_2d <- function(x, y = NULL, n_min = 2L, n_max = 200L) {
 
-  # --- 1. Data Preparation ---
+  # ── 1. Data preparation ───────────────────────────────────────────────────
   if (is.null(y)) {
-    if (NCOL(x) != 2) stop("x must be a 2-column matrix if y is not provided")
-    y <- x[, 2]
-    x <- x[, 1]
+    if (!is.matrix(x) && !is.data.frame(x))
+      stop("'x' must be a 2-column matrix or data.frame when 'y' is NULL.")
+    if (NCOL(x) != 2L)
+      stop("'x' must have exactly 2 columns when 'y' is NULL.")
+    y <- as.numeric(x[, 2L])
+    x <- as.numeric(x[, 1L])
+  } else {
+    x <- as.numeric(x)
+    y <- as.numeric(y)
   }
 
-  # Remove NAs
-  valid_mask <- !is.na(x) & !is.na(y)
-  x <- x[valid_mask]
-  y <- y[valid_mask]
+  valid <- !is.na(x) & !is.na(y)
+  x <- x[valid]; y <- y[valid]
+  n_samples <- length(x)
+  if (n_samples < 2L) stop("At least 2 complete (non-NA) observations are required.")
 
-  if (length(x) < 2) stop("Need at least 2 data points.")
+  x_min <- min(x); x_max <- max(x); range_x <- x_max - x_min
+  y_min <- min(y); y_max <- max(y); range_y <- y_max - y_min
 
-  x_min <- min(x); x_max <- max(x)
-  y_min <- min(y); y_max <- max(y)
+  if (range_x == 0) stop("X data are constant.")
+  if (range_y == 0) stop("Y data are constant.")
 
-  # --- 2. Resolution Check ---
-
-  # Helper to find minimum difference (standardized naming)
-  get_resolution <- function(vals) {
-    vals_unique <- sort(unique(vals))
-    if (length(vals_unique) < 2) return(Inf)
-    d_min <- min(abs(diff(vals_unique)))
+  # ── 2. Resolution guard ───────────────────────────────────────────────────
+  min_gap <- function(vals) {
+    u <- sort(unique(vals))
+    if (length(u) < 2L) return(Inf)
+    d <- min(diff(u))
     # Protect against machine epsilon issues
-    if (d_min < .Machine$double.eps * 100) return(Inf)
-    return(d_min)
+    if (d < .Machine$double.eps * 100) Inf else d
   }
 
-  dx_min <- get_resolution(x)
-  dy_min <- get_resolution(y)
+  dx_min <- min_gap(x); dy_min <- min_gap(y)
 
-  # Calculate limits based on resolution (FAQ compliance)
-  # N_max = Range / (2 * Min_Bin_Width)
-  limit_nx <- floor((x_max - x_min) / (2 * dx_min))
-  limit_ny <- floor((y_max - y_min) / (2 * dy_min))
+  limit_nx <- if (is.finite(dx_min)) floor(range_x / (2 * dx_min)) else n_max
+  limit_ny <- if (is.finite(dy_min)) floor(range_y / (2 * dy_min)) else n_max
 
-  # Adjust n_max if resolution is too coarse
-  actual_n_max_x <- min(n_max, limit_nx)
-  actual_n_max_y <- min(n_max, limit_ny)
+  # Cap: resolution limit, sample size, and user-supplied n_max
+  N_MAX_x <- max(n_min, min(n_max, limit_nx, n_samples))
+  N_MAX_y <- max(n_min, min(n_max, limit_ny, n_samples))
 
-  # Ensure we respect n_min, even if resolution suggests otherwise (fallback)
-  if (actual_n_max_x < n_min) actual_n_max_x <- n_min
-  if (actual_n_max_y < n_min) actual_n_max_y <- n_min
+  n_min <- as.integer(n_min)
 
-  nx_vector <- n_min:actual_n_max_x
-  ny_vector <- n_min:actual_n_max_y
+  # ── 3. Core cost for a single (nx, ny) pair ───────────────────────────────
+  # Optimised vs original:
+  #   - k_mean = n_samples / (nx * ny)  [no tabulate needed for mean]
+  #   - k_var  = sum(k^2)/M - k_mean^2  [numerically equivalent but faster]
+  compute_cost <- function(nx, ny) {
+    nx <- as.integer(nx); ny <- as.integer(ny)
+    dx <- range_x / nx;  dy <- range_y / ny
 
-  # --- 3. Grid Search ---
-  # Rows: X bins, Columns: Y bins
-  cost_matrix <- matrix(NA, nrow = length(nx_vector), ncol = length(ny_vector))
+    bx <- findInterval(x,
+                       seq(x_min, x_max, length.out = nx + 1L),
+                       rightmost.closed = TRUE)
+    by <- findInterval(y,
+                       seq(y_min, y_max, length.out = ny + 1L),
+                       rightmost.closed = TRUE)
+
+    # counts[i, j] = number of points in X-bin i, Y-bin j
+    counts <- tabulate((bx - 1L) * ny + by, nbins = nx * ny)
+
+    M      <- nx * ny
+    k_mean <- n_samples / M                       # exact, no floating-point iteration
+    k_var  <- sum(counts^2L) / M - k_mean^2       # equivalent to biased variance (divide by N, not N-1) as per Shimazaki & Shinomoto
+
+    # Cost Function: C = (2*mean - var) / Area^2
+    (2 * k_mean - k_var) / (dx * dy)^2
+  }
+
+  # ── 4. Grid search ───────────────────────────────────────────────────────
+  nx_vector <- n_min:N_MAX_x
+  ny_vector <- n_min:N_MAX_y
+
+  # KEY OPTIMISATION: Y bin indices do not depend on nx.
+  # Pre-compute them once for all ny values BEFORE the outer (nx) loop.
+  # Savings: length(nx_vector) * length(ny_vector) → length(ny_vector) findInterval calls.
+  bin_idx_y_list <- lapply(ny_vector, function(ny) {
+    findInterval(y, seq(y_min, y_max, length.out = ny + 1L),
+                 rightmost.closed = TRUE)
+  })
+
+  cost_matrix <- matrix(NA_real_, nrow = length(nx_vector),
+                        ncol = length(ny_vector))
 
   for (i in seq_along(nx_vector)) {
     nx <- nx_vector[i]
-    dx <- (x_max - x_min) / nx
-
-    # rightmost.closed = TRUE ensures max value is included
-    breaks_x <- seq(x_min, x_max, length.out = nx + 1)
-    bin_idx_x <- findInterval(x, breaks_x, rightmost.closed = TRUE)
+    dx <- range_x / nx
+    bx <- findInterval(x,
+                       seq(x_min, x_max, length.out = nx + 1L),
+                       rightmost.closed = TRUE)
 
     for (j in seq_along(ny_vector)) {
-      ny <- ny_vector[j]
-      dy <- (y_max - y_min) / ny
+      ny  <- ny_vector[j]
+      dy  <- range_y / ny
+      by  <- bin_idx_y_list[[j]]          # pre-computed — no findInterval here
 
-      breaks_y <- seq(y_min, y_max, length.out = ny + 1)
-      bin_idx_y <- findInterval(y, breaks_y, rightmost.closed = TRUE)
+      counts <- tabulate((bx - 1L) * ny + by, nbins = nx * ny)
+      M      <- nx * ny
+      k_mean <- n_samples / M
+      k_var  <- sum(counts^2L) / M - k_mean^2
 
-      # Linearize 2D indices to 1D for fast counting
-      linear_indices <- (bin_idx_x - 1) * ny + bin_idx_y
-
-      # Count events in each bin
-      counts <- tabulate(linear_indices, nbins = nx * ny)
-
-      # Statistics: Mean (k) and Biased Variance (v)
-      k_mean <- mean(counts)
-
-      # Use biased variance (divide by N, not N-1) as per Shimazaki & Shinomoto
-      k_var  <- sum((counts - k_mean)^2) / (nx * ny)
-
-      # Cost Function: C = (2*mean - var) / Area^2
-      area <- dx * dy
-      cost_matrix[i, j] <- (2 * k_mean - k_var) / area^2
+      cost_matrix[i, j] <- (2 * k_mean - k_var) / (dx * dy)^2
     }
   }
 
-  # --- 4. Result Construction ---
-  min_idx <- which(cost_matrix == min(cost_matrix), arr.ind = TRUE)
-  best_i <- min_idx[1, 1]
-  best_j <- min_idx[1, 2]
-
-  opt_nx <- nx_vector[best_i]
-  opt_ny <- ny_vector[best_j]
+  # Use arrayInd for safety (which.min on matrix returns linear index)
+  best <- arrayInd(which.min(cost_matrix), dim(cost_matrix))
+  opt_nx   <- nx_vector[best[1L]]
+  opt_ny   <- ny_vector[best[2L]]
+  min_cost <- cost_matrix[best]
 
   res <- list(
     opt_nx      = opt_nx,
     opt_ny      = opt_ny,
-    opt_dx      = (x_max - x_min) / opt_nx,
-    opt_dy      = (y_max - y_min) / opt_ny,
-    min_cost    = cost_matrix[best_i, best_j],
-    cost_matrix = cost_matrix,
-    nx_tested   = nx_vector,
-    ny_tested   = ny_vector,
+    opt_dx      = range_x / opt_nx,
+    opt_dy      = range_y / opt_ny,
     data        = list(x = x, y = y)
   )
+
   class(res) <- "sshist_2d"
-  return(res)
+  res
 }
 
 # --- S3 Methods ---
 
 #' Plot method for sshist objects
+#'
+#' Produces single-panel histogram
+#'
 #' @export
-#' @param x An object of class sshist.
-#' @param ... Additional arguments passed to plot.
-#' @return No return value, called for side effects. Creates a two-panel plot showing:
-#'   (1) the cost function curve with the optimal number of bins highlighted, and
-#'   (2) the optimal histogram with the selected bin edges.
+#' @param x An object of class \code{"sshist"}.
+#' @param ... Additional arguments passed to \code{\link[graphics]{hist}}.
+#' @return No return value; called for its side effect of producing a plot.
 plot.sshist <- function(x, ...) {
-  old_par <- par(mfrow=c(1,2))
-  on.exit(par(old_par))
-
-  # Plot 1: Cost Function
-  plot(x$n_tested, x$cost, type='l', col='blue', lwd=2,
-       main="Cost Minimization", xlab="N bins", ylab="Cost")
-  points(x$opt_n, min(x$cost), col='red', pch=19, cex=1.5)
-  grid()
-
-  # Plot 2: Histogram
-  hist(x$data, breaks=x$edges, freq=FALSE,
-       main=paste("Optimal Hist (N=", x$opt_n, ")"),
-       col="lightblue", border="white", xlab="Data")
+  dots <- list(...)
+  if (!"xlab" %in% names(dots)) dots$xlab <- "Data"
+  if (!"main" %in% names(dots)) dots$main <- paste0("Optimal Histogram (N = ", x$opt_n, ")")
+  dots$x <- x$data
+  dots$breaks <- x$edges
+  dots$freq <- FALSE
+  dots$col <- "lightblue"
+  dots$border <- "white"
+  do.call(hist, dots)
   rug(x$data)
+
+  y_max <- par("usr")[4]
+  points(
+    x = x$data,
+    y = jitter(rep(0, length(x$data)), amount = y_max * 0.02),
+    pch = 16,
+    col = adjustcolor("darkred", alpha.f = 0.4)
+  )
 }
 
 #' Print method for sshist objects
 #' @export
-#' @param x An object of class sshist.
-#' @param ... Additional arguments passed to print.
-#' @return Returns the input object \code{x} invisibly. The method is called for its
-#'   side effect of printing a summary of the Shimazaki-Shinomoto histogram
-#'   optimization results, including the optimal number of bins, bin width, and
-#'   minimum cost value.
+#' @param x An object of class \code{"sshist"}.
+#' @param ... Additional arguments passed to \code{\link[base]{print}}.
+#' @return Returns \code{x} invisibly.
 print.sshist <- function(x, ...) {
   cat("Shimazaki-Shinomoto Histogram Optimization\n")
   cat("------------------------------------------\n")
   cat("Optimal Bins (N):", x$opt_n, "\n")
-  cat("Bin Width (D):   ", format(x$opt_d, digits=4), "\n")
-  cat("Cost Minimum:    ", format(min(x$cost), digits=4), "\n")
+  cat("Bin Width (D):   ", format(x$opt_d,  digits = 4), "\n")
   invisible(x)
 }
 
 #' Plot method for sshist_2d objects
+#'
+#' Draws the optimal 2D histogram as a heatmap with proper data-coordinate axes.
+#'
 #' @export
-#' @param x An object of class sshist.
-#' @param ... Additional arguments passed to plot.
-#' @return No return value, called for side effects. Creates a two-panel plot showing:
-#'   (1) a heatmap of the cost function landscape across different bin combinations
-#'   with the optimal point highlighted in red, and (2) the optimal 2D histogram
-#'   visualization using the selected bin numbers for both dimensions.
+#' @param x An object of class \code{"sshist_2d"}.
+#' @param ... Additional arguments passed to \code{\link[graphics]{image}}.
+#' @return No return value; called for its side effect of producing a plot.
 plot.sshist_2d <- function(x, ...) {
-  nx <- x$opt_nx
-  ny <- x$opt_ny
+  # Extract data
+  nx     <- x$opt_nx
+  ny     <- x$opt_ny
   data_x <- x$data$x
   data_y <- x$data$y
 
-  # Re-calculate bins for plotting
-  x_cut <- cut(data_x, breaks = nx)
-  y_cut <- cut(data_y, breaks = ny)
-  h <- table(x_cut, y_cut)
+  # Bin boundaries and midpoints (for axis tick positions)
+  x_breaks <- seq(min(data_x), max(data_x), length.out = nx + 1L)
+  y_breaks <- seq(min(data_y), max(data_y), length.out = ny + 1L)
+  x_mids   <- (x_breaks[-1L] + x_breaks[-(nx + 1L)]) / 2
+  y_mids   <- (y_breaks[-1L] + y_breaks[-(ny + 1L)]) / 2
 
-  old_par <- par(mfrow = c(1, 2))
+  # cut() matches stat_bin2d: (a,b] intervals, first bin [a,b]
+  bx     <- as.integer(cut(data_x, x_breaks, include.lowest = TRUE))
+  by_idx <- as.integer(cut(data_y, y_breaks, include.lowest = TRUE))
+
+  # <-- critical: index is row-major (Y varies fastest), R matrix is column-major
+  counts <- matrix(tabulate((bx - 1L) * ny + by_idx, nbins = nx * ny),
+                   nrow = nx, ncol = ny, byrow = TRUE)
+
+  # Zero cells -> NA: image() renders them as background (transparent),
+  # matching ggplot2's geom_bin2d which does not draw zero-count tiles.
+  counts[counts == 0L] <- NA_integer_
+
+  col <- hcl.colors(64, "Inferno")
+
+  # Assemble arguments for image()
+  dots <- list(...)
+  if (!"xlab" %in% names(dots)) dots$xlab <- "X"
+  if (!"ylab" %in% names(dots)) dots$ylab <- "Y"
+  if (!"main" %in% names(dots)) {
+    dots$main <- sprintf("Shimazaki-Shinomoto 2D Histogram (%d \u00d7 %d bins)", nx, ny)
+  }
+  dots$x <- x_mids
+  dots$y <- y_mids
+  dots$z <- counts
+  dots$col <- col
+
+  old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par))
 
-  # Plot 1: Cost Matrix Heatmap
-  image(x$nx_tested, x$ny_tested, x$cost_matrix,
-        main = "Cost Function Landscape",
-        xlab = "N bins (X)", ylab = "N bins (Y)",
-        col = terrain.colors(16))
-  points(x$opt_nx, x$opt_ny, pch = 19, col = "red")
+  par(bg = "gray92")
+
+  # Main plot (left side)
+  par(fig = c(0, 0.88, 0, 1), mar = c(4, 4, 3, 1))
+  do.call(image, dots)
+
+  # Cell borders and outline
+  abline(v = x_breaks, h = y_breaks, col = "white", lwd = 0.4)
+  points(data_x, data_y, pch = 20, col = adjustcolor("cyan", alpha.f = 0.5), cex = 0.7)
   box()
 
-  # Plot 2: Optimal 2D Histogram
-  image(h, main = paste0("Optimal 2D Hist\nNx=", nx, ", Ny=", ny),
-        col = terrain.colors(16),
-        axes = FALSE)
+  # Color scale (right side)
+  par(fig = c(0.88, 1, 0.1, 0.9), mar = c(2, 0.5, 2, 2.5), new = TRUE)
+  plot.new()
+  bar <- seq(min(counts, na.rm = TRUE),
+             max(counts, na.rm = TRUE),
+             length.out = length(col) + 1L)
+
+  # <- key fix for scale alignment
+  par(yaxs = "i")
+  plot.window(xlim = c(0, 1), ylim = range(bar))
+
+  usr <- par("usr")
+  # Grey panel background (drawn before borders so borders sit on top)
+  rect(usr[1], usr[3], usr[2], usr[4], col = "white", border = NA)
+
+  image(x = c(0, 1), y = bar,
+        z = matrix(seq_along(col), nrow = 1),
+        col = col, add = TRUE)
+
+  axis(4, at = pretty(range(counts, na.rm = TRUE), n = 5L),
+       las = 1L, tcl = -0.3, mgp = c(0, 0.4, 0))
   box()
 }
 
@@ -341,6 +401,5 @@ print.sshist_2d <- function(x, ...) {
   cat("Optimal Bins Y:  ", x$opt_ny, "\n")
   cat("Bin Width X:     ", format(x$opt_dx, digits=4), "\n")
   cat("Bin Width Y:     ", format(x$opt_dy, digits=4), "\n")
-  cat("Cost Minimum:    ", format(x$min_cost, digits=4), "\n")
   invisible(x)
 }

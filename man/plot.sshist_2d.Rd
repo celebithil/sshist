@@ -7,16 +7,13 @@
 \method{plot}{sshist_2d}(x, ...)
 }
 \arguments{
-\item{x}{An object of class sshist.}
+\item{x}{An object of class \code{"sshist_2d"}.}
 
-\item{...}{Additional arguments passed to plot.}
+\item{...}{Additional arguments passed to \code{\link[graphics]{image}}.}
 }
 \value{
-No return value, called for side effects. Creates a two-panel plot showing:
-(1) a heatmap of the cost function landscape across different bin combinations
-with the optimal point highlighted in red, and (2) the optimal 2D histogram
-visualization using the selected bin numbers for both dimensions.
+No return value; called for its side effect of producing a plot.
 }
 \description{
-Plot method for sshist_2d objects
+Draws the optimal 2D histogram as a heatmap with proper data-coordinate axes.
 }

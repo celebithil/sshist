@@ -12,6 +12,7 @@ knitr::opts_chunk$set(
   out.width = "100%"
 )
 ```
+
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/sshist)](https://CRAN.R-project.org/package=sshist)
 [![CRAN downloads](https://cranlogs.r-pkg.org/badges/grand-total/sshist)](https://CRAN.R-project.org/package=sshist)
@@ -21,113 +22,52 @@ knitr::opts_chunk$set(
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/celebithil/sshist)
 <!-- badges: end -->
 
-# sshist
+# sshist: Optimal Density Estimation via Shimazaki-Shinomoto Method
 
-The `sshist` package implements the Shimazaki-Shinomoto method for finding the optimal number of bins in histograms.
+The `sshist` package implements state-of-the-art algorithms for optimal non-parametric density estimation based on the framework developed by Hideaki Shimazaki and Shigeru Shinomoto (2007, 2010). The core optimization principle is to find the parameters that minimize the expected Mean Integrated Squared Error (MISE) between the estimated density and the true, unknown underlying distribution. 
 
-Unlike the standard Freedman-Diaconis rule (used by default in ggplot2), this method minimizes the expected L2 loss function between the histogram and the unknown underlying density function. It is particularly effective for:
+By utilizing purely data-driven optimization, this package avoids subjective choices for bin widths or kernel bandwidths, making it highly robust—especially for data with complex, multimodal, or heavy-tailed structures.
 
-  - Time-dependent rate estimation (PSTH).
-  - Identifying intrinsic data structures in multimodal distributions.
-  - Optimizing both 1D and 2D data binnings.
+## Key Features
+
+- **Data-Driven Optimization:** Replaces subjective "rules of thumb" (like Sturges' or Freedman-Diaconis' rules) with objective minimizers of the MISE cost function.
+- **Multi-Dimensional Support:** Provides full capability for both 1D univariate and 2D bivariate distributions.
+- **Fixed and Variable Estimators:** Offers both classical global estimators and advanced locally adaptive variable bandwidth selectors (based on Abramson's scaling method).
+- **High Performance:** Designed to evaluate cost functions efficiently, leveraging analytical formulations and fast backend calculations.
+
+## Summary of Available Functions
+
+| Function | Estimator Type | Dimension | Bandwidth / Bin Selection |
+|:---|:---|:---|:---|
+| `sshist` | Histogram | 1D | Fixed (single optimal bin width) |
+| `sshist_2d` | Histogram | 2D | Fixed independent bin width per axis |
+| `sskernel` | Kernel Density | 1D | Fixed global bandwidth |
+| `ssvkernel` | Kernel Density | 1D | Locally adaptive variable bandwidth |
+| `sskernel2d` | Kernel Density | 2D | Fixed global isotropic bandwidth |
+| `ssvkernel2d` | Kernel Density | 2D | Locally adaptive bivariate bandwidth |
 
 ## Installation
 
-```{r, eval=FALSE}
-# stable version from CRAN
+You can install the stable version of `sshist` from CRAN:
+
+```r
 install.packages("sshist")
-``` 
+```
 
-You can install the development version of sshist like so:
+Alternatively, you can install the development version directly from GitHub using `devtools`:
 
-``` {r, eval=FALSE}
+```r
 # install.packages("devtools")
 devtools::install_github("celebithil/sshist")
 ```
 
-## Example 1: Basic 1D Usage
-
-Here is a basic example using the Old Faithful Geyser data.
-
-```{r example-1d}
-library(sshist)
-
-# Load data
-data(faithful)
-x_data <- faithful$waiting
-
-# Calculate optimal binning
-res <- sshist(x_data)
-
-# Print summary
-print(res)
-
-hist(res$data, breaks=res$edges, freq=FALSE,
-       main=paste("Optimal Hist (N=", res$opt_n, ")"),
-       col="lightblue", border="white", xlab="Data")
-
-```
-
-## Example 2: Integration with ggplot2
-
-`sshist` calculates the optimal parameters, which you can easily pass to `ggplot2`.
-
-```{r example-1d-ggplot}
-library(ggplot2)
-
-# Create a data frame
-df <- data.frame(waiting = x_data)
-
-ggplot(df, aes(x = waiting)) +
-  geom_histogram(breaks = res$edges, fill = "#69b3a2", color = "white", alpha = 0.8) +
-  geom_rug(alpha = 0.1) +
-  ggtitle(paste0("Shimazaki-Shinomoto Optimization (N = ", res$opt_n, ")")) +
-  theme_minimal()
-```
-
-## Example 3: 2D Histogram Optimization
-
-For bivariate data, `sshist_2d` finds the optimal binning for both X and Y axes simultaneously.
-
-```{r example-2d}
-# Get bimodal 2D data
-y_data <- faithful$eruptions
-
-# Optimize
-res2d <- sshist_2d(x_data, y_data)
-
-# Print summary
-print(res2d)
-```
-
-## Example 4: 2D Optimization with ggplot2
-
-You can easily use the optimized bin counts from `sshist_2d` in `ggplot2` by passing them to the `bins` argument in `geom_bin2d`.
-
-```{r example-2d-ggplot}
-# We use the 'res2d' object calculated in Example 3
-# containing optimal bins for Old Faithful data
-
-res2d <- sshist_2d(faithful$waiting, faithful$eruptions )
-
-ggplot(faithful, aes(waiting, eruptions)) +
-  geom_bin2d(bins = c(res2d$opt_nx, res2d$opt_ny)) +
-  scale_fill_distiller(palette = "Spectral") +
-  labs(
-    title = "Optimal 2D Binning (Old Faithful)",
-    subtitle = paste0("Shimazaki-Shinomoto Method: ", 
-                      res2d$opt_nx, " x ", res2d$opt_ny, " bins"),
-    x = "Waiting Time (min)",
-    y = "Eruption Duration (min)"
-  ) +
-  theme(axis.text = element_text(size = 12),
-        title = element_text(size = 12,face="bold"),
-        panel.border = element_rect(linewidth = 2, color = "black", fill = NA))
-```
-
 ## References
 
-- Shimazaki, H. and Shinomoto, S., 2007. A method for selecting the bin size of a time histogram. Neural Computation, 19(6), pp.1503-1527. [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
+- Shimazaki, H. and Shinomoto, S. (2007). A method for selecting the bin size of a time histogram. *Neural Computation*, **19**(6), 1503–1527. [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
+- Shimazaki, H. and Shinomoto, S. (2010). Kernel bandwidth optimization in spike rate estimation. *Journal of Computational Neuroscience*, **29**(1-2), 171–182. [doi:10.1007/s10827-009-0180-4](https://doi.org/10.1007/s10827-009-0180-4)
+
 - https://www.neuralengine.org/res/histogram.html
+
 - https://github.com/shimazaki/density_estimation
+
 - https://s-shinomoto.com/toolbox/sshist/hist.html

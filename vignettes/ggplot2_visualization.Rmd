@@ -1,0 +1,221 @@
+---
+title: "Advanced Density Visualization with ggplot2"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Advanced Density Visualization with ggplot2}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteDepends{ggplot2}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  fig.width = 7,
+  fig.height = 5,
+  fig.align = "center"
+)
+```
+
+While the `sshist` package provides native `plot()` S3 methods for rapid exploratory data analysis, modern analytical workflows frequently rely on `ggplot2` for creating publication-ready visualizations.
+
+This vignette demonstrates how to extract the structural outputs from all six primary functions of the package and transform them into tidy data frames, and construct advanced plots using `ggplot2` and `patchwork`
+
+```{r setup, message=FALSE, warning=FALSE}
+library(sshist)
+options(sshist.ncores = 2)
+
+has_ggplot2 <- requireNamespace("ggplot2", quietly = TRUE)
+if (has_ggplot2) {
+  library(ggplot2)
+  library(patchwork)
+  theme_set(theme_minimal(base_size = 12))
+}
+```
+
+---
+
+## 1. Univariate (1D) Visualizations
+
+We use the classic `faithful` dataset to explore univariate distributions, focusing on the `waiting` time variable.
+
+### 1.1 Optimal 1D Histogram
+
+The `sshist()` function returns an optimal set of breakpoints (`edges`). Instead of manually constructing rectangles, the most robust way to replicate the optimal histogram in `ggplot2` is to pass these edges directly to the `breaks` argument of `geom_histogram()`. 
+
+*Note: By explicitly providing `breaks`, we bypass ggplot2's default alignment and `pretty()` binning logic, ensuring the histogram is mathematically exact and perfectly anchored to the data's true domain.*
+
+```{r ggplot-sshist, eval = has_ggplot2}
+data(faithful)
+
+# 1. Calculate optimal binning parameters
+res_hist <- sshist(faithful$waiting)
+
+# 2. Plot using raw data but mapping to the optimized breaks
+ggplot(faithful, aes(x = waiting)) +
+  geom_histogram(
+    breaks = res_hist$edges,
+    fill = "steelblue",
+    color = "white",
+    alpha = 0.85,
+    aes(y = after_stat(density))
+  ) +
+  geom_rug(alpha = 0.5, color = "slategrey") +
+  labs(
+    title = "Optimal 1D Histogram (Shimazaki-Shinomoto)",
+    subtitle = sprintf("Optimized bins: %d | Bin width: %.2f", res_hist$opt_n, res_hist$opt_d),
+    x = "Waiting time (minutes)",
+    y = "Density"
+  )
+```
+
+### 1.2 Fixed vs. Adaptive 1D Kernel Density (`sskernel` & `ssvkernel`)
+
+For kernel estimations, the functions return evaluation coordinates `x` and density values `y`. We can combine a fixed global bandwidth estimator and a locally adaptive estimator to compare how they handle data.
+
+A "heavy" visualization pattern is to show the density estimate on top.
+
+```{r ggplot-kde-1d, fig.height=7, eval = has_ggplot2}
+# Define a shared grid for perfect alignment
+shared_grid <- seq(min(faithful$waiting), max(faithful$waiting), length.out = 500)
+
+# Run fixed and adaptive estimators
+res_fixed <- sskernel(faithful$waiting, tin = shared_grid)
+res_adaptive <- ssvkernel(faithful$waiting, tin = shared_grid)
+
+# Create a tidy data frame for density lines
+df_density <- data.frame(
+  time      = c(res_fixed$x, res_adaptive$x),
+  density   = c(res_fixed$y, res_adaptive$y),
+  Estimator = rep(c("Fixed Global", "Locally Adaptive"), each = length(shared_grid))
+)
+
+# Visualize the comparison
+ggplot(df_density, aes(x = time, y = density, color = Estimator)) +
+  geom_line(linewidth = 1) +
+  geom_area(aes(fill = Estimator), alpha = 0.1, position = "identity") +
+  scale_color_manual(values = c("Fixed Global" = "#4575b4", "Locally Adaptive" = "#d73027")) +
+  scale_fill_manual(values = c("Fixed Global" = "#4575b4", "Locally Adaptive" = "#d73027")) +
+  labs(
+    title = "1D KDE Comparison: Fixed vs. Adaptive",
+    x = "Waiting time (minutes)", 
+    y = "Density"
+  ) +
+  theme(legend.position = "top")
+```
+
+### 1.3 Comparing Window Functions (`WinFunc`) in Adaptive KDE
+
+The `ssvkernel` function uses Nadaraya-Watson kernel regression to smooth the locally adaptive bandwidths over time. The `WinFunc` parameter determines the shape of the weighting function used in this secondary smoothing step. 
+
+We can visually compare how different analytical window functions ("Boxcar", "Gauss", "Laplace", "Cauchy") influence the final adaptive density estimate.
+
+```{r ggplot-winfunc-comparison, fig.height=4, eval = has_ggplot2}
+# Run adaptive estimators with all available window functions
+res_boxcar  <- ssvkernel(faithful$waiting, tin = shared_grid, WinFunc = "Boxcar")
+res_gauss   <- ssvkernel(faithful$waiting, tin = shared_grid, WinFunc = "Gauss")
+res_laplace <- ssvkernel(faithful$waiting, tin = shared_grid, WinFunc = "Laplace")
+res_cauchy  <- ssvkernel(faithful$waiting, tin = shared_grid, WinFunc = "Cauchy")
+
+# Create a tidy data frame for plotting
+df_winfunc <- data.frame(
+  time    = rep(shared_grid, 4),
+  density = c(res_boxcar$y, res_gauss$y, res_laplace$y, res_cauchy$y),
+  Window  = factor(
+    rep(c("Boxcar", "Gauss", "Laplace", "Cauchy"), each = length(shared_grid)),
+    levels = c("Boxcar", "Gauss", "Laplace", "Cauchy")
+  )
+)
+
+# Visualize the effect of different weight functions
+ggplot(df_winfunc, aes(x = time, y = density, color = Window)) +
+  geom_line(linewidth = 0.8, alpha = 0.85) +
+  scale_color_viridis_d(option = "plasma", end = 0.9) +
+  labs(
+    title = "Effect of Window Functions on Adaptive KDE",
+    subtitle = "Comparing Boxcar, Gauss, Laplace, and Cauchy weight distributions",
+    x = "Waiting time (minutes)",
+    y = "Density"
+  ) +
+  theme(legend.position = "right")
+```
+
+---
+
+## 2. Bivariate (2D) Visualizations
+
+For 2D space, we analyze `eruptions` duration and `waiting` time simultaneously.
+
+### 2.1 Optimal 2D Histogram (`sshist_2d`)
+
+`sshist_2d()` calculates the mathematically ideal grid partitions for X and Y independently. In `ggplot2`, we can use `stat_bin2d` and supply the optimal number of bins or bin widths calculated by the algorithm to ensure object-driven plotting.
+
+```{r ggplot-sshist2d, fig.asp=0.85, eval = has_ggplot2}
+res_hist2d <- sshist_2d(faithful$eruptions, faithful$waiting)
+
+# Extract optimal bin counts or widths if explicit
+# Since ggplot2 handles bins natively, we supply the calculated breaks or counts
+ggplot(faithful, aes(x = eruptions, y = waiting)) +
+  stat_bin2d(
+    breaks = list(
+      x = seq(min(faithful$eruptions), max(faithful$eruptions), length.out = res_hist2d$opt_nx + 1L),
+      y = seq(min(faithful$waiting), max(faithful$waiting), length.out = res_hist2d$opt_ny + 1L)
+    ),
+    color = "black",
+    linewidth = 0.2
+  ) +
+  scale_fill_distiller(palette = "YlGnBu", direction = -1) +
+  labs(
+    title = "Optimal 2D Histogram (Old Faithful)",
+    subtitle = sprintf("Grid: %d \u00d7 %d bins", res_hist2d$opt_nx, res_hist2d$opt_ny),
+    x = "Eruption duration (min)",
+    y = "Waiting time (min)",
+    fill = "Count"
+  )
+```
+
+### 2.2 Fixed vs. Adaptive 2D Kernel Density (`sskernel2d` & `ssvkernel2d`)
+
+Our 2D KDE functions return optimized matrices (`z`). We can unravel these matrices into a tidy `x, y, z` format using `expand.grid()` to leverage `geom_raster()`.
+
+Let's run both `sskernel2d` (Fixed) and `ssvkernel2d` (Adaptive) and display them side-by-side using `patchwork` to visualize the exact differences in smoothing patterns.
+
+```{r ggplot-kde2d, fig.width=11, fig.height=5.5, eval = has_ggplot2}
+# Compute densities on a 150x150 evaluation grid
+grid_res <- 150
+res_2d_fixed <- sskernel2d(faithful$waiting, faithful$eruptions, n_grid = grid_res)
+res_2d_adap  <- ssvkernel2d(faithful$waiting, faithful$eruptions, n_grid = grid_res)
+
+# Helper function to wrangle the list output into a tidy data frame
+wrangle_2d <- function(obj) {
+  df <- expand.grid(x = obj$x_grid, y = obj$y_grid)
+  df$density <- as.vector(obj$z) 
+  return(df)
+}
+
+df_fixed <- wrangle_2d(res_2d_fixed)
+df_adap  <- wrangle_2d(res_2d_adap)
+
+# Plot 1: Fixed Isotropic KDE
+p1 <- ggplot(df_fixed, aes(x = x, y = y, fill = density)) +
+  geom_raster(interpolate = TRUE) +
+  scale_fill_viridis_c(option = "mako") +
+  labs(title = "Fixed Global Bandwidth (sskernel2d)", x = "Waiting time (min)", y = "Eruption duration (min)") +
+  theme(legend.position = "none")
+
+# Plot 2: Locally Adaptive KDE
+p2 <- ggplot(df_adap, aes(x = x, y = y, fill = density)) +
+  geom_raster(interpolate = TRUE) +
+  scale_fill_viridis_c(option = "mako") +
+  labs(title = "Locally Adaptive Bandwidth (ssvkernel2d)", x = "Waiting time (min)", y = "Eruption duration (min)", fill = "Density")
+
+# Combine side by side with a shared legend
+p1 + p2 + plot_layout(guides = "collect")
+```
+
+The locally adaptive estimator (`ssvkernel2d`) demonstrably tightens the density around the concentrated clusters and smooths the vacant regions, avoiding the "halo" effect typical of fixed bandwidth constraints.
+
+```{r fallback, eval = !has_ggplot2, echo = FALSE, results = "asis"}
+cat("**Note:** The figures in this vignette require the **ggplot2** and **patchwork** packages, which are not available in this environment. Install them with `install.packages(c(\"ggplot2\", \"patchwork\"))` and rebuild the vignette.")
+```

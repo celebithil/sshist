@@ -11,8 +11,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // sshist_cost_cpp
-NumericVector sshist_cost_cpp(NumericVector x, IntegerVector N_vector, int sn, double x_min, double x_max);
-RcppExport SEXP _sshist_sshist_cost_cpp(SEXP xSEXP, SEXP N_vectorSEXP, SEXP snSEXP, SEXP x_minSEXP, SEXP x_maxSEXP) {
+NumericVector sshist_cost_cpp(NumericVector x, IntegerVector N_vector, int sn, double x_min, double x_max, int n_threads);
+RcppExport SEXP _sshist_sshist_cost_cpp(SEXP xSEXP, SEXP N_vectorSEXP, SEXP snSEXP, SEXP x_minSEXP, SEXP x_maxSEXP, SEXP n_threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -21,13 +21,77 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type sn(snSEXP);
     Rcpp::traits::input_parameter< double >::type x_min(x_minSEXP);
     Rcpp::traits::input_parameter< double >::type x_max(x_maxSEXP);
-    rcpp_result_gen = Rcpp::wrap(sshist_cost_cpp(x, N_vector, sn, x_min, x_max));
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(sshist_cost_cpp(x, N_vector, sn, x_min, x_max, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// get_tau_bounds_cpp
+NumericVector get_tau_bounds_cpp(NumericVector xn, NumericVector yn, int n_threads);
+RcppExport SEXP _sshist_get_tau_bounds_cpp(SEXP xnSEXP, SEXP ynSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type xn(xnSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type yn(ynSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(get_tau_bounds_cpp(xn, yn, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_sskernel2d_cost_cpp
+double compute_sskernel2d_cost_cpp(NumericVector xn, NumericVector yn, double w, int n_threads);
+RcppExport SEXP _sshist_compute_sskernel2d_cost_cpp(SEXP xnSEXP, SEXP ynSEXP, SEXP wSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type xn(xnSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type yn(ynSEXP);
+    Rcpp::traits::input_parameter< double >::type w(wSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_sskernel2d_cost_cpp(xn, yn, w, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_pilot_density_cpp
+NumericVector compute_pilot_density_cpp(NumericVector x, NumericVector y, double wx, double wy, int n_threads);
+RcppExport SEXP _sshist_compute_pilot_density_cpp(SEXP xSEXP, SEXP ySEXP, SEXP wxSEXP, SEXP wySEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< double >::type wx(wxSEXP);
+    Rcpp::traits::input_parameter< double >::type wy(wySEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_pilot_density_cpp(x, y, wx, wy, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// compute_kde2d_cpp
+NumericMatrix compute_kde2d_cpp(NumericVector x, NumericVector y, NumericVector gx, NumericVector gy, NumericVector wx, NumericVector wy, int n_threads);
+RcppExport SEXP _sshist_compute_kde2d_cpp(SEXP xSEXP, SEXP ySEXP, SEXP gxSEXP, SEXP gySEXP, SEXP wxSEXP, SEXP wySEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type gx(gxSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type gy(gySEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type wx(wxSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type wy(wySEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(compute_kde2d_cpp(x, y, gx, gy, wx, wy, n_threads));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_sshist_sshist_cost_cpp", (DL_FUNC) &_sshist_sshist_cost_cpp, 5},
+    {"_sshist_sshist_cost_cpp", (DL_FUNC) &_sshist_sshist_cost_cpp, 6},
+    {"_sshist_get_tau_bounds_cpp", (DL_FUNC) &_sshist_get_tau_bounds_cpp, 3},
+    {"_sshist_compute_sskernel2d_cost_cpp", (DL_FUNC) &_sshist_compute_sskernel2d_cost_cpp, 4},
+    {"_sshist_compute_pilot_density_cpp", (DL_FUNC) &_sshist_compute_pilot_density_cpp, 5},
+    {"_sshist_compute_kde2d_cpp", (DL_FUNC) &_sshist_compute_kde2d_cpp, 7},
     {NULL, NULL, 0}
 };
 

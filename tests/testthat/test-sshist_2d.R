@@ -1,59 +1,101 @@
-test_that("sshist_2d correctly handles discrete integer data (comb effect protection)", {
-  # Загружаем тестовые данные (X - float, Y - int)
-  # Файл должен лежать в папке тестов или генерироваться на лету
-  # Для надежности сгенерируем похожие данные прямо тут,
-  # чтобы тест не зависел от внешнего CSV файла
-  set.seed(42)
-  # X: смесь нормальных, float
-  x <- c(rnorm(500, -1, 1), rnorm(1000, 1, 0.5))
-  # Y: смесь нормальных, но ОКРУГЛЕННАЯ до целых (имитация данных из CSV)
-  y_raw <- c(rnorm(500, 55, 5), rnorm(1000, 75, 8))
-  y <- round(y_raw)
+options(sshist.ncores = 2)
 
-  # Запускаем алгоритм с запросом на 100 бинов
-  res <- sshist_2d(x, y, n_max = 100)
+# ── Reference value tests ─────────────────────────────────────────────────────
 
-  # --- ПРОВЕРКИ ---
-
+test_that("sshist_2d reproduces reference values on oldfaithful", {
+  df  <- read.table("oldfaithful.txt", header = FALSE, col.names = c("eruptions", "waiting"))
+  res <- sshist_2d(df$eruptions, df$waiting)
   expect_s3_class(res, "sshist_2d")
-
-  # 1. Проверка оси X (Float)
-  # Тут разрешение высокое, ограничений быть не должно (кроме n_max)
-  # Python дал 3 бина. Проверим, что R находит что-то разумное (не 1 и не 100)
-  expect_gt(res$opt_nx, 1)
-  expect_lt(res$opt_nx, 50)
-
-  # 2. Проверка оси Y (Integer) - САМОЕ ВАЖНОЕ
-  # Диапазон данных Y примерно 60 (от ~40 до ~100). Разрешение 1.
-  # Максимально возможное число бинов = Range / 1 ≈ 60.
-  # Если бы защиты не было, алгоритм мог бы выбрать 100.
-  # Мы ожидаем, что алгоритм САМ ограничил поиск.
-
-  y_range <- max(y) - min(y)
-  res_y <- 1 # мы знаем, что подали целые числа
-  theoretical_limit <- floor(y_range / res_y)
-
-  # Проверяем, что R не вышел за физический предел разрешения
-  expect_lte(res$opt_ny, theoretical_limit)
-
-  # Проверяем, что в tested векторе нет значений выше лимита
-  expect_lte(max(res$ny_tested), theoretical_limit)
-
-  # 3. Проверка формы результата
-  expect_equal(dim(res$cost_matrix), c(length(res$nx_tested), length(res$ny_tested)))
+  expect_equal(res$opt_nx, 20L)
+  expect_equal(res$opt_ny, 9L)
+  expect_equal(res$opt_dx, 0.175, tolerance = 1e-6)
+  expect_equal(res$opt_dy, 5.8888889, tolerance = 1e-6)
 })
 
-test_that("sshist_2d runs on external csv data", {
-    # Предполагаем, что в CSV: V1 - X, V2 - Y
-    df <- read.csv("test_data_2d.csv", header = FALSE)
+# ── Input flexibility ─────────────────────────────────────────────────────────
 
-    # Запускаем
-    res <- sshist_2d(df$V1, df$V2)
+test_that("sshist_2d accepts two vectors, matrix, and data.frame", {
+  x <- faithful$eruptions
+  y <- faithful$waiting
 
-    # Наша реализация должна дать меньше, так как Y - целые числа.
-    expect_equal(res$opt_ny, 9)
-    expect_equal(res$opt_nx, 20)
+  r1 <- sshist_2d(x, y)
+  r2 <- sshist_2d(cbind(x, y))
+  r3 <- sshist_2d(data.frame(x, y))
 
-    # Проверяем, что матрица стоимости посчитана
-    expect_false(any(is.na(res$cost_matrix)))
+  expect_equal(r1$opt_nx, r2$opt_nx)
+  expect_equal(r1$opt_nx, r3$opt_nx)
+  expect_equal(r1$opt_ny, r2$opt_ny)
+})
+
+# ── Input validation ──────────────────────────────────────────────────────────
+
+test_that("sshist_2d errors on non-numeric input", {
+  expect_error(suppressWarnings(sshist_2d(letters, 1:10)))
+  expect_error(suppressWarnings(sshist_2d(1:10, letters)))
+})
+
+test_that("sshist_2d errors with fewer than 2 complete observations", {
+  expect_error(sshist_2d(1, 2))
+  expect_error(sshist_2d(1:2, NA))
+})
+
+test_that("sshist_2d errors with mismatched vector lengths", {
+  expect_error(sshist_2d(1:10, 1:5))
+})
+
+test_that("sshist_2d errors on constant data", {
+  expect_error(sshist_2d(rep(5, 10), 1:10), "constant")
+  expect_error(sshist_2d(1:10, rep(5, 10)), "constant")
+})
+
+test_that("sshist_2d errors with invalid matrix input", {
+  expect_error(sshist_2d(matrix(1:9, ncol = 3)), "exactly 2 columns")
+  expect_error(sshist_2d(list(a = 1:5, b = 1:5)))
+})
+
+test_that("sshist_2d removes NAs silently", {
+  x <- c(1:20, NA, NA)
+  y <- c(21:40, NA, NA)
+  res <- sshist_2d(x, y)
+  expect_equal(length(res$data$x), 20L)
+  expect_equal(length(res$data$y), 20L)
+})
+
+# ── Parameter variations ──────────────────────────────────────────────────────
+
+test_that("sshist_2d respects n_min and n_max", {
+  x <- faithful$eruptions
+  y <- faithful$waiting
+  res <- sshist_2d(x, y, n_min = 5, n_max = 10)
+  expect_gte(res$opt_nx, 5)
+  expect_gte(res$opt_ny, 5)
+  expect_lte(res$opt_nx, 10)
+  expect_lte(res$opt_ny, 10)
+})
+
+# ── Return value structure ────────────────────────────────────────────────────
+
+test_that("sshist_2d returns correct structure", {
+  res <- sshist_2d(faithful$eruptions, faithful$waiting)
+  expect_named(res, c("opt_nx", "opt_ny", "opt_dx", "opt_dy", "data"))
+  expect_type(res$opt_nx, "integer")
+  expect_type(res$opt_ny, "integer")
+  expect_type(res$opt_dx, "double")
+  expect_type(res$opt_dy, "double")
+  expect_true(all(res$opt_dx > 0, res$opt_dy > 0))
+})
+
+# ── S3 methods ────────────────────────────────────────────────────────────────
+
+test_that("print.sshist_2d runs without error", {
+  res <- sshist_2d(faithful$eruptions, faithful$waiting)
+  expect_output(print(res), "Optimal Bins X")
+  expect_invisible(print(res))
+})
+
+test_that("plot.sshist_2d runs without error", {
+  pdf(NULL)
+  res <- sshist_2d(faithful$eruptions, faithful$waiting)
+  expect_silent(plot(res))
+  dev.off()
 })

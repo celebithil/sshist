@@ -10,87 +10,217 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>",
-  fig.width = 7, 
-  fig.height = 3.5
+  comment  = "#>",
+  fig.width = 7
 )
 ```
-The `sshist` package provides a fast and robust method for selecting the optimal number of bins for histograms. It implements the algorithm developed by Shimazaki and Shinomoto (2007), which minimizes the expected L2 loss function between the histogram and the unknown underlying density function.
 
-This method is particularly superior to standard rules (like Sturges or Freedman-Diaconis) when the data exhibits:
+The `sshist` package provides a suite of tools for optimal density estimation based on the work of Shimazaki and Shinomoto (2007, 2010). The core idea — minimizing the expected Mean Integrated Squared Error (MISE) between an estimator and the unknown underlying density — is available in four flavors:
 
-  - Multimodal structures.
-  - Time-dependent rate changes (e.g., in neuroscience).
-  - Complex 2D distributions.
+| Function | Estimator | Dimension | Bandwidth |
+|---|---|---|---|
+| `sshist` | Histogram | 1D | Fixed (single bin width) |
+| `sshist_2d` | Histogram | 2D | Fixed per axis |
+| `sskernel` | Kernel density | 1D | Fixed global |
+| `ssvkernel` | Kernel density | 1D | Locally adaptive (Abramson) |
+| `sskernel2d` | Kernel density | 2D | Fixed global (isotropic) |
+| `ssvkernel2d` | Kernel density | 2D | Locally adaptive (Abramson) |
 
-```{r setup}
+These methods are particularly useful when data exhibits multimodal structure, because naive rules (Sturges, Freedman–Diaconis) tend to over- or under-smooth. 
+
+*Note: The package supports OpenMP C++ multithreading and parallel bootstrapping out of the box. For CRAN compliance, it defaults to 1 core. You can globally increase this by setting the option below.*
+
+```{r setup, message=FALSE, warning=FALSE}
 library(sshist)
+options(sshist.ncores = 2) # Use 2 cores for vignette building
 ```
 
-## 1. One-Dimensional Optimization
+---
 
-Let's look at the classic "Old Faithful" geyser data. It has two distinct modes (short and long eruptions).
+## 1. Optimal 1D Histogram: `sshist`
 
-### Standard Approach vs. sshist
+The `sshist` function performs an exhaustive search over candidate bin counts to find the optimal bin width that minimizes the MISE cost function.
 
-Standard histograms often hide the structure if the bin width is not chosen carefully.
+**Complete Parameter List:**
 
-```{r comparision}
+* `x`:  Numeric vector of data points. Missing values (`NA`) are automatically removed.
+* `n_max`: Integer or `NULL`. Maximum number of bins to consider. If `NULL`, it is determined automatically based on data resolution to prevent comb artifacts.
+* `sn`: Integer. Number of histogram shifts used for the shift-average estimation (default `30`).
+* `ncores`: Integer. Number of OpenMP threads to use for the C++ cost calculation (default `1` or via `getOption("sshist.ncores")`).
+
+### Comparison with the standard approach
+
+```{r comparison, fig.asp = 0.5}
 data(faithful)
 x_data <- faithful$eruptions
 
-# 1. Standard R histogram (Sturges rule by default)
 oldpar <- par(mfrow = c(1, 2))
-hist(x_data, main = "Standard hist()", xlab = "Duration of Eruptions", col = "gray90")
 
-# 2. Shimazaki-Shinomoto Optimization
-# The function returns an S3 object with optimal parameters
+# Standard R histogram (Sturges rule)
+hist(x_data,
+     main = "Standard hist()  (Sturges)",
+     xlab = "Eruption duration (min)", col = "grey90")
+
+# Shimazaki-Shinomoto optimal histogram
 res <- sshist(x_data)
-hist(x_data, breaks=res$edges,
-       main=paste("Optimal Hist (N=", res$opt_n, ")"),
-       xlab = "Duration of Eruptions", col = "gray90")
+hist(x_data, breaks = res$edges,
+     main = paste0("sshist()  (N = ", res$opt_n, " bins)"),
+     xlab = "Eruption duration (min)", col = "grey90")
 
 par(oldpar)
 ```
 
-As you can see, `sshist` automatically detects the bimodal nature and sharp peaks much better than the conservative default.
+`sshist` automatically detects the bimodal structure that the default rule obscures.
 
-### Accessing Parameters
+### The S3 object
+`sshist()` returns an object of class `"sshist"`. The `plot()` method draws the optimal histogram with a data rug.
 
-You can extract the optimal number of bins (opt_n) or bin width (opt_d) to use in other plotting libraries like ggplot2.
-
-```{r optimal params}
+```{r sshist-print}
 print(res)
-
-# The plot method shows the Cost Function Graph and the Optimal Histogram
 plot(res)
 ```
 
-The left plot shows the cost function graph. The red dot indicates the global minimum (optimal binning). The right plot shows the resulting histogram.
+---
 
-## 2. Two-Dimensional Optimization
+## 2. Optimal 1D Kernel Density: `sskernel` & `ssvkernel`
 
-`sshist` also supports 2D histograms, solving the problem of choosing bin sizes for X and Y axes simultaneously.
+For smooth continuous distributions, `sskernel` evaluates a single fixed global bandwidth, while `ssvkernel` computes locally adaptive bandwidths based on Abramson's square-root scaling law. Both use a fast FFT implementation.
 
-```{r sshist_2d}
-# Run 2D optimization
-# This calculates the cost function for a grid of (Nx, Ny) combinations
-res_2d <- sshist_2d(iris$Petal.Length, iris$Petal.Width)
+**Complete Parameter List:**
 
-# optimal number of bins
-print(res_2d)
+* `x`: Numeric vector of sample data.
+* `tin`: Optional numeric vector specifying the grid of evaluation points. If `NULL`, a grid is generated automatically.
+* `W` *(sskernel only)*: Optional numeric vector of bandwidths to evaluate. If provided, the internal grid search is skipped.
+* `M` *(ssvkernel only)*: Integer. Number of bandwidths to examine during the adaptive process (default `80`).
+* `WinFunc` *(ssvkernel only)*: Character string specifying the window function for local weights. Options: `"Gauss"`, `"Boxcar"` (default), `"Laplace"`, or `"Cauchy"`.
+* `nbs`: Integer. Number of bootstrap samples for calculating confidence intervals. Set to `0` to skip (default `0`).
+* `ncores`: Integer. Number of CPU cores to use for parallel bootstrapping (default 1L or via getOption(`"sshist.ncores"`, 1L)).
 
-# The plot method shows the Cost Function Landscape and the Optimal Histogram
-plot(res_2d)
+### Fixed Global Bandwidth (`sskernel`)
+
+Estimates a 1D density using a Gaussian kernel with the globally optimal bandwidth.
+
+```{r sskernel, fig.asp = 0.6}
+res_k <- sskernel(x_data)
+print(res_k)
+plot(res_k, xlab = "Eruption duration (min)")
 ```
 
-The left plot shows the cost function landscape. The red dot indicates the global minimum (optimal binning). The right plot shows the resulting histogram.
+### Locally Adaptive Bandwidth (`ssvkernel`)
 
-## Performance
+Uses a stiffness parameter `gamma` (optimized via MISE) to control how much the bandwidth can vary locally. A Nadaraya–Watson smoother with the selected window function (`WinFunc`) stabilizes the bandwidth sequence.
 
-The core cost function calculation is implemented in C++ (via Rcpp) and parallelized with OpenMP where possible, making it efficient even for large datasets or dense grid searches in 2D.
+```{r ssvkernel, fig.asp = 0.6}
+res_sv <- ssvkernel(x_data)
+print(res_sv)
+plot(res_sv, xlab = "Eruption duration (min)")
+```
+
+### Estimating Uncertainty with Bootstrap
+
+By setting the `nbs` parameter, you can instruct the function to perform a multi-core bootstrap resampling. For `sskernel`, this is a standard non-parametric bootstrap. For `ssvkernel`, it utilizes a Poisson bootstrap suited for point processes.
+
+When bootstrap intervals are calculated, the S3 `plot()` method automatically overlays a 90% confidence band (between the 5th and 95th percentiles).
+
+```{r bootstrap-example, fig.asp = 0.6}
+# Run 300 bootstrap iterations using 2 cores
+res_boot <- sskernel(x_data, nbs = 300)
+print(res_boot)
+
+# The plot function automatically detects and renders the confb95 band
+plot(res_boot, 
+     main = "Optimal KDE with 90% Bootstrap Confidence Band", 
+     xlab = "Eruption duration (min)",
+     col = "#d6604d", 
+     band_col = adjustcolor("#d6604d", alpha.f = 0.2))
+
+res_sv_boot <- ssvkernel(x_data, nbs = 300, WinFunc = "Gauss")
+
+print(res_sv_boot)
+
+# The plot function automatically detects and renders the confb95 band
+plot(res_sv_boot, 
+     main = "Locally Adaptive KDE with 90% Bootstrap Confidence Band", 
+     xlab = "Eruption duration (min)",
+     col = "#d6604d", 
+     band_col = adjustcolor("#d6604d", alpha.f = 0.2))
+```
+
+*Note: The raw density values for every bootstrap iteration are preserved in the `yb` matrix inside the returned object, giving you full flexibility to calculate custom percentiles if needed.*
+
+---
+
+## 3. Optimal 2D Density Estimation
+
+When analyzing bivariate relationships, the package offers both grid-based histograms and smooth kernel density estimators.
+
+### 2D Histogram: `sshist_2d`
+
+Solves the X and Y bin-count problem simultaneously using the same MISE cost function extended to two dimensions.
+
+**Complete Parameter List:**
+
+* `x`: Numeric vector for X coordinates, or a 2-column matrix/data.frame containing X and Y.
+* `y`: Numeric vector for Y coordinates (ignored if `x` is a matrix).
+* `n_min`: Integer. Minimum number of bins per axis (default `2`).
+* `n_max`: Integer or `NULL`. Maximum number of bins per axis (default `200`). Automatically clamped to the data resolution limit.
+
+```{r sshist-2d, fig.asp = 0.85}
+res_2d <- sshist_2d(faithful$waiting, faithful$eruptions)
+print(res_2d)
+
+# plot() renders the optimal 2D histogram as a heatmap
+plot(res_2d, xlab = "Waiting time (min)", ylab = "Eruption duration (min)")
+```
+
+### 2D Kernel Density: `sskernel2d` and `ssvkernel2d`
+
+**Complete Parameter List:**
+
+* `x`: Numeric vector for X coordinates, or a 2-column matrix containing X and Y.
+* `y`: Numeric vector for Y coordinates (required if `x` is a vector).
+* `W` *(sskernel2d only)*: Optional numeric vector of bandwidths to evaluate. If `NULL`, a smart log-spaced grid is used.
+* `n_grid`: Integer specifying the resolution of the output density matrix (default `100`).
+* `sensitivity` *(ssvkernel2d only)*: Numeric scalar controlling the sensitivity of local bandwidths to the pilot density. A value of `0.5` (default) corresponds to Abramson's inverse square-root law.
+* `ncores`: Integer. Number of OpenMP threads to use for the heavy C++ 2D grid computations.
+
+**`sskernel2d`** finds the globally optimal isotropic bandwidth. To handle variables on different scales, the data are internally standardized before optimization; the resulting bandwidth is then rescaled back to each original axis.
+
+```{r kde2d-fixed, fig.asp = 1}
+df <- faithful   # eruptions: ~2-5 min,  waiting: ~40-90 min
+
+# Fixed global bandwidth (C++ accelerated)
+res_2d_fixed <- sskernel2d(df$eruptions, df$waiting, n_grid = 256)
+print(res_2d_fixed)
+plot(res_2d_fixed,
+     xlab = "Eruption duration (min)",
+     ylab = "Waiting time (min)")
+```
+
+**`ssvkernel2d`** wraps `sskernel2d` as a pilot estimator and applies Abramson's square-root law to derive a per-point local bandwidth.
+
+```{r kde2d-adap, fig.asp = 1}
+# Locally adaptive bandwidth (Abramson's method)
+res_2d_adap <- ssvkernel2d(df$eruptions, df$waiting,
+                            n_grid = 256, sensitivity = 0.5)
+print(res_2d_adap)
+plot(res_2d_adap,
+     xlab = "Eruption duration (min)",
+     ylab = "Waiting time (min)")
+```
+
+The adaptive estimator dramatically sharpens the two high-density clusters while smoothing the near-empty valley between them — dynamically matching local data density.
+
+---
 
 ## References
 
-- Shimazaki, H. and Shinomoto, S., 2007. A method for selecting the bin size of a time histogram. Neural Computation, 19(6), pp.1503-1527. [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
+- Shimazaki, H. and Shinomoto, S. (2007). A method for selecting the bin size of a time histogram. *Neural Computation*, **19**(6), 1503–1527. [doi:10.1162/neco.2007.19.6.1503](https://doi.org/10.1162/neco.2007.19.6.1503)
+
+- Shimazaki, H. and Shinomoto, S. (2010). Kernel bandwidth optimization in spike rate estimation. *Journal of Computational Neuroscience*, **29**(1–2), 171–182. [doi:10.1007/s10827-009-0180-4](https://doi.org/10.1007/s10827-009-0180-4)
+
 - https://www.neuralengine.org/res/histogram.html
+
+- https://github.com/shimazaki/density_estimation
+
+- https://s-shinomoto.com/toolbox/sshist/hist.html

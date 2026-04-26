@@ -7,15 +7,12 @@
 \method{print}{sshist}(x, ...)
 }
 \arguments{
-\item{x}{An object of class sshist.}
+\item{x}{An object of class \code{"sshist"}.}
 
-\item{...}{Additional arguments passed to print.}
+\item{...}{Additional arguments passed to \code{\link[base]{print}}.}
 }
 \value{
-Returns the input object \code{x} invisibly. The method is called for its
-side effect of printing a summary of the Shimazaki-Shinomoto histogram
-optimization results, including the optimal number of bins, bin width, and
-minimum cost value.
+Returns \code{x} invisibly.
 }
 \description{
 Print method for sshist objects

@@ -4,51 +4,37 @@
 \alias{sshist}
 \title{Optimal Histogram Binning (Shimazaki-Shinomoto Method)}
 \usage{
-sshist(x, n_max = NULL, sn = 30)
+sshist(x, n_max = NULL, sn = 30, ncores = getOption("sshist.ncores", 1L))
 }
 \arguments{
-\item{x}{A numeric vector of data. Missing values (NA) will be removed.}
+\item{x}{A numeric vector of data. \code{NA} values are silently removed.}
 
-\item{n_max}{An integer specifying the maximum number of bins to test.
-If \code{NULL} (default), it is automatically determined based on data resolution
-and sample size to prevent overfitting.}
+\item{n_max}{Integer or \code{NULL}. Maximum number of bins to consider.
+When \code{NULL} (default) the limit is set automatically as
+\code{min(500, floor(range / (2 * min_resolution)), n_samples)}.}
 
-\item{sn}{Integer. The number of shifts to use for averaging (default is 30).}
+\item{sn}{Integer. Number of histogram shifts used in the shift-average
+(default \code{30}).}
+
+\item{ncores}{Integer. Number of OpenMP threads to use. Defaults to 1 for CRAN compliance.}
 }
 \value{
-An object of class \code{"sshist"} containing:
+An object of class \code{"sshist"} (a named list) containing:
 \describe{
-\item{opt_n}{The optimal number of bins.}
-\item{opt_d}{The optimal bin width.}
-\item{edges}{The sequence of break points for the optimal histogram.}
-\item{cost}{A numeric vector of the cost function values.}
-\item{n_tested}{The vector of N values tested.}
-\item{data}{The original data (cleaned).}
+\item{\code{opt_n}}{Optimal number of bins (integer).}
+\item{\code{opt_d}}{Optimal bin width (\eqn{= \mathrm{range} / N_{\mathrm{opt}}}).}
+\item{\code{edges}}{Numeric vector of \eqn{N_{\mathrm{opt}} + 1} break
+points for the optimal histogram.}
+\item{\code{data}}{Cleaned (NA-removed) input data.}
 }
 }
 \description{
-Computes the optimal bin width and number of bins using the Shimazaki-Shinomoto
-method. This implementation uses Rcpp for high performance and includes
-shift-averaging to remove edge-position bias.
-}
-\examples{
-# 1. Basic usage with base graphics
-data(faithful)
-res <- sshist(faithful$waiting)
-plot(res)
-
-# 2. Usage with ggplot2
-if (requireNamespace("ggplot2", quietly = TRUE)) {
-  library(ggplot2)
-  df <- data.frame(waiting = faithful$waiting)
-
-  ggplot(df, aes(x = waiting)) +
-    geom_histogram(breaks = res$edges, fill = "lightblue", color = "black") +
-    ggtitle(paste("Optimal Shimazaki-Shinomoto Bins (N =", res$opt_n, ")")) +
-    theme_minimal()
-}
+Computes the optimal bin width and number of bins using the
+Shimazaki-Shinomoto (2007) method. This implementation performs an
+exhaustive search over candidate bin counts, exactly matching the
+original Python/MATLAB reference algorithms.
 }
 \references{
-Shimazaki, H. and Shinomoto, S., 2007. A method for selecting the bin size of a time histogram.
-\emph{Neural Computation}, 19(6), pp.1503-1527.
+Shimazaki, H. and Shinomoto, S. (2007). A method for selecting the bin size
+of a time histogram. \emph{Neural Computation}, \strong{19}(6), 1503–1527.
 }

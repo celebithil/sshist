@@ -10,3 +10,9 @@ src/*.dll
 .quarto
 .Rproj.user
 cran-comments.md
+.positai
+/doc/
+/Meta/
+*.Rcheck/
+*.tar.gz
+src/symbols.rds

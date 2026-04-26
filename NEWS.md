@@ -1,3 +1,35 @@
+# sshist 0.2.0
+
+## New Features
+
+* Added `sskernel()` for optimal 1D fixed-bandwidth kernel density estimation.
+* Added `sskernel2d()` for optimal 2D fixed-bandwidth kernel density estimation.
+* Added `ssvkernel()` for locally adaptive 1D kernel density estimation (Shimazaki & Shinomoto 2010).
+* Added `ssvkernel2d()` for locally adaptive 2D kernel density estimation (Abramson's method).
+* Added bootstrap confidence interval support for all kernel density estimators.
+* Added C++ backends for 2D KDE cost computation, pilot density, and grid evaluation with OpenMP parallelism.
+* Added `ncores` parameter to `sshist()` for multithreaded computation.
+
+## Algorithm Improvements
+
+* Re-implemented `sshist()` with cleaner exhaustive search logic, exactly matching the original Python/MATLAB reference algorithms.
+* Added resolution guard (anti-comb effect) with `N_max = Range / (2 * Min_Resolution)`.
+* Improved 2D histogram cost computation with pre-computed Y-bin indices for significant speedup.
+* Added auto-expanding grid search for kernel bandwidth optimization.
+
+## Documentation
+
+* Added vignettes: "Introduction to sshist" and "ggplot2 Visualization".
+* Added comprehensive S3 plot/print methods for all estimator classes.
+* Updated README with complete function summary table.
+
+## Internal Changes
+
+* Split code into modular R files: `sshist.R`, `sskernel.R`, `ssvkernel.R`, `common.R`.
+* Updated to roxygen2 8.0 / `Config/roxygen2/version` format.
+* Removed `cost` and `n_tested` fields from `sshist` return value (simplified output).
+* Added C++ Rcpp functions: `get_tau_bounds_cpp`, `compute_sskernel2d_cost_cpp`, `compute_pilot_density_cpp`, `compute_kde2d_cpp`.
+
 # sshist 0.1.3
 
 ## Algorithm Improvements
