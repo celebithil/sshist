@@ -1,3 +1,10 @@
+# sshist 0.2.2
+
+## CRAN Compliance Fixes
+
+* Removed invalid `\cr` from `\describe{}` in package documentation, fixing "LaTeX Error: There's no line here to end."
+* Quoted `OpenMP` and `backends` in DESCRIPTION to avoid spelling NOTE on CRAN.
+
 # sshist 0.2.1
 
 ## README Fixes

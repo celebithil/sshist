@@ -5,17 +5,17 @@
 \alias{sshist-package}
 \title{sshist: Optimal Density Estimation via Shimazaki-Shinomoto Method}
 \description{
-Implements the Shimazaki-Shinomoto method for optimizing the bin width of histograms and the bandwidth of kernel density estimators. The framework minimizes the expected Mean Integrated Squared Error (MISE) and supports both 1D and 2D distributions, fixed and locally adaptive estimators, bootstrap confidence intervals, and OpenMP-accelerated 'C++' backends. Ideally suited for time-dependent rate estimation and identifying intrinsic data structures. For more details see Shimazaki and Shinomoto (2007) \doi{10.1162/neco.2007.19.6.1503} and Shimazaki and Shinomoto (2010) \doi{10.1007/s10827-009-0180-4}.
+Implements the Shimazaki-Shinomoto method for optimizing the bin width of histograms and the bandwidth of kernel density estimators. The framework minimizes the expected Mean Integrated Squared Error (MISE) and supports both 1D and 2D distributions, fixed and locally adaptive estimators, bootstrap confidence intervals, and 'OpenMP'-accelerated 'C++' 'backends'. Ideally suited for time-dependent rate estimation and identifying intrinsic data structures. For more details see Shimazaki and Shinomoto (2007) \doi{10.1162/neco.2007.19.6.1503} and Shimazaki and Shinomoto (2010) \doi{10.1007/s10827-009-0180-4}.
 }
 \section{Main functions}{
 
 \describe{
-\item{\code{\link{sshist}}}{\cr Optimal 1D histogram binning.}
-\item{\code{\link{sshist_2d}}}{\cr Optimal 2D histogram binning.}
-\item{\code{\link{sskernel}}}{\cr Optimal 1D fixed-bandwidth kernel density estimation.}
-\item{\code{\link{sskernel2d}}}{\cr Optimal 2D fixed-bandwidth kernel density estimation.}
-\item{\code{\link{ssvkernel}}}{\cr Locally adaptive 1D kernel density estimation.}
-\item{\code{\link{ssvkernel2d}}}{\cr Locally adaptive 2D kernel density estimation.}
+\item{\code{\link{sshist}}}{Optimal 1D histogram binning.}
+\item{\code{\link{sshist_2d}}}{Optimal 2D histogram binning.}
+\item{\code{\link{sskernel}}}{Optimal 1D fixed-bandwidth kernel density estimation.}
+\item{\code{\link{sskernel2d}}}{Optimal 2D fixed-bandwidth kernel density estimation.}
+\item{\code{\link{ssvkernel}}}{Locally adaptive 1D kernel density estimation.}
+\item{\code{\link{ssvkernel2d}}}{Locally adaptive 2D kernel density estimation.}
 }
 }
 

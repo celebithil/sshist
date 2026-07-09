@@ -2,12 +2,12 @@
 #'
 #' @section Main functions:
 #' \describe{
-#'   \item{\code{\link{sshist}}}{\cr Optimal 1D histogram binning.}
-#'   \item{\code{\link{sshist_2d}}}{\cr Optimal 2D histogram binning.}
-#'   \item{\code{\link{sskernel}}}{\cr Optimal 1D fixed-bandwidth kernel density estimation.}
-#'   \item{\code{\link{sskernel2d}}}{\cr Optimal 2D fixed-bandwidth kernel density estimation.}
-#'   \item{\code{\link{ssvkernel}}}{\cr Locally adaptive 1D kernel density estimation.}
-#'   \item{\code{\link{ssvkernel2d}}}{\cr Locally adaptive 2D kernel density estimation.}
+#'   \item{\code{\link{sshist}}}{Optimal 1D histogram binning.}
+#'   \item{\code{\link{sshist_2d}}}{Optimal 2D histogram binning.}
+#'   \item{\code{\link{sskernel}}}{Optimal 1D fixed-bandwidth kernel density estimation.}
+#'   \item{\code{\link{sskernel2d}}}{Optimal 2D fixed-bandwidth kernel density estimation.}
+#'   \item{\code{\link{ssvkernel}}}{Locally adaptive 1D kernel density estimation.}
+#'   \item{\code{\link{ssvkernel2d}}}{Locally adaptive 2D kernel density estimation.}
 #' }
 #'
 #' @section References:
