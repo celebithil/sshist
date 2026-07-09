@@ -1,3 +1,9 @@
+# sshist 0.2.1
+
+## README Fixes
+
+* Removed YAML frontmatter (`output: github_document`) from `README.Rmd` and `README.md`.
+
 # sshist 0.2.0
 
 ## New Features
