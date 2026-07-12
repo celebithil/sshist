@@ -51,7 +51,7 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
   }
   dt <- min(diff(t))
 
-  breaks <- c(t - dt/2, t[length(t)] + dt/2)
+  breaks <- c(t - dt / 2, t[length(t)] + dt / 2)
   # 'right = FALSE' strictly mimics Python's np.histogram half-open bins [a, b)
   y_hist <- graphics::hist(x_ab, breaks = breaks, right = FALSE, plot = FALSE)$counts / dt
   L <- length(y_hist)
@@ -77,7 +77,7 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
   W_vals <- logexp(seq(ilogexp(Wmin_limit), ilogexp(T_span), length.out = M))
   WIN <- W_vals
 
-  # Matrix of local costs c (M x L) -- Equation (15)
+  # Matrix of local costs c (M x L)
   c_matrix <- matrix(0, M, L)
   for (j in 1:M) {
     w <- W_vals[j]
@@ -85,20 +85,67 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
     c_matrix[j, ] <- yh^2 - 2 * yh * y_hist + (2 / (sqrt(2 * pi) * w)) * y_hist
   }
 
+  # --- FAST MVFFT MATRIX SMOOTHING ---
+  max_w <- max(WIN) / dt
+  Lmax <- max(1, floor(L + 3 * max_w))
+  n_fft <- 2^ceiling(log2(Lmax))
+
+  # Pad c_matrix
+  c_padded <- matrix(0, nrow = M, ncol = n_fft)
+  c_padded[, 1:L] <- c_matrix
+
+  # Forward FFT on all rows simultaneously
+  C_fft <- stats::mvfft(t(c_padded))
+
+  # Symmetric frequency vector
+  f_vec <- pmin((0:(n_fft - 1)) / n_fft, 1 - (0:(n_fft - 1)) / n_fft)
+
   # Find locally optimal fixed bandwidths optws (M x L)
   optws <- matrix(0, M, L)
   for (i in 1:M) {
-    Win <- WIN[i]
-    C_local <- t(apply(c_matrix, 1, function(row) fftkernel_win(row, Win / dt, WinFunc)))
-    optws[i, ] <- W_vals[apply(C_local, 2, which.min)]
+    w <- WIN[i] / dt
+
+    # Frequency response of the selected window
+    if (WinFunc == "Boxcar") {
+      a <- sqrt(12) * w
+      t_freq <- 2 * pi * f_vec
+      K <- 2 * sin(a * t_freq / 2) / (a * t_freq)
+      K[1] <- 1
+    } else if (WinFunc == "Laplace") {
+      K <- 1 / (1 + (w * 2 * pi * f_vec)^2 / 2)
+    } else if (WinFunc == "Cauchy") {
+      K <- exp(-w * abs(2 * pi * f_vec))
+    } else { # Gauss
+      K <- exp(-0.5 * (w * 2 * pi * f_vec)^2)
+    }
+
+    # Multiply in frequency domain across all columns
+    Y_fft <- C_fft * K
+
+    # Inverse FFT and extract original length L
+    C_local_t <- Re(stats::mvfft(Y_fft, inverse = TRUE)) / n_fft
+
+    # Take the required slice (it already has dimensions L x M)
+    C_local_slice <- C_local_t[1:L, ]
+
+    # max.col searches by rows. We precisely need the index of M for each L
+    best_idx <- max.col(-C_local_slice, ties.method = "first")
+    optws[i, ] <- W_vals[best_idx]
   }
+
+  # --- PRECOMPUTE DISTANCE MATRICES FOR COST FUNCTION ---
+  dist_mat <- outer(t, t, "-")
+  idx_nz <- which(y_hist > 0)
+  y_hist_nz <- y_hist[idx_nz]
+  t_nz <- t[idx_nz]
+  dist_nz <- outer(t, t_nz, "-")
 
   # --- Global Search (Grid Search) ---
   n_grid <- 15
   gamma_grid <- seq(1e-4, 1, length.out = n_grid)
 
   C_coarse <- vapply(gamma_grid, function(g) {
-    CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, g)$Cg
+    CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, g, dist_mat, dist_nz)$Cg
   }, numeric(1))
 
   best_idx <- which.min(C_coarse)
@@ -107,7 +154,7 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
 
   # --- Precise Refinement (Brent's Method) ---
   opt_res <- stats::optimize(
-    f = function(g) CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, g)$Cg,
+    f = function(g) CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, g, dist_mat, dist_nz)$Cg,
     interval = c(lower_b, upper_b),
     tol = 1e-5
   )
@@ -115,12 +162,9 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
   best_gamma <- opt_res$minimum
 
   # --- Final Calculation ---
-  f_final <- CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, best_gamma)
+  f_final <- CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, best_gamma, dist_mat, dist_nz)
   yopt <- f_final$yv / sum(f_final$yv * dt)
   optw <- f_final$optwp
-
-  gs_history <- c(gamma_grid, best_gamma)
-  C_history  <- c(C_coarse, opt_res$objective)
 
   # Interpolate to the requested 'tin' grid
   y_final <- stats::approx(t, yopt, xout = tin, rule = 2)$y
@@ -137,8 +181,9 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
 
   has_boot <- pkg_has_boot()
   if (nbs > 0 && !has_boot) {
-    warning("boot package not available, skipping bootstrap CI")
+    warning("The 'boot' package is not installed. Skipping bootstrap CI.")
   }
+
   if (nbs > 0 && has_boot) {
     # 1. Sample generator for parametric Poisson bootstrap
     ran_gen_poisson <- function(data, mle) {
@@ -158,8 +203,7 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
       t_nz <- t[idx_nz]
       yb_buf <- numeric(L)
 
-      # The Balloon Density Estimator from the original algorithm
-      # The density kernel is always Gaussian per the original algorithm
+      # The Balloon Density Estimator (Original density kernel is always Gaussian)
       for (k_idx in 1:L) {
         yb_buf[k_idx] <- sum(y_histb_nz * dt * stats::dnorm(t[k_idx] - t_nz, sd = optw[k_idx]))
       }
@@ -181,7 +225,7 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
       R = nbs,
       sim = "parametric",
       ran.gen = ran_gen_poisson,
-      mle = NULL, # The 'mle' parameter is required by the boot API but is not used here
+      mle = NULL,
       parallel = par_type,
       ncpus = ncores
     )
@@ -206,37 +250,60 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
 #' Internal helper: Compute the cost function for a given gamma
 #' @keywords internal
 #' @noRd
-CostFunction <- function(y_hist, N, t, dt, optws, WIN, WinFunc, g) {
+CostFunction <- function(y_hist, N, t, dt, optws, WIN, WinFunc, g, dist_mat, dist_nz) {
   L <- length(y_hist)
-  optwv <- numeric(L)
-  for (k in 1:L) {
-    gs <- optws[, k] / WIN
-    if (g > max(gs)) {
-      optwv[k] <- min(WIN)
-    } else if (g < min(gs)) {
-      optwv[k] <- max(WIN)
-    } else {
-      idx <- max(which(gs >= g))
-      optwv[k] <- g * WIN[idx]
-    }
+  M <- length(WIN)
+
+  # Vectorized computation of local window width (No for loop!)
+  GS <- optws / WIN  # M x L matrix (automatic recycling of WIN vector across columns)
+
+  # Find maxima and minima of each column via max.col (super-fast)
+  # Transpose because max.col operates on rows
+  idx_max_GS <- max.col(t(GS), ties.method = "first")
+  max_GS <- GS[cbind(idx_max_GS, 1:L)]
+
+  idx_min_GS <- max.col(t(-GS), ties.method = "first")
+  min_GS <- GS[cbind(idx_min_GS, 1:L)]
+
+  # Find the maximum index (idx) where GS >= g
+  # Multiplying logical matrix by seq_len(M) converts TRUE to row numbers (1..M)
+  idx_mat <- (GS >= g) * seq_len(M)
+
+  # ties.method = "last" ensures we take the maximum index
+  # (if all FALSE, it returns M, but we override this below)
+  idx_g <- max.col(t(idx_mat), ties.method = "last")
+
+  # Form the final vector
+  optwv <- g * WIN[idx_g]
+
+  # Apply boundary limits to the entire vector at once
+  optwv[g > max_GS] <- WIN[1]
+  optwv[g < min_GS] <- WIN[M]
+
+  # base R vector recycling
+  w_vec_rep <- rep(optwv / g, each = L)
+
+  # Nadaraya-Watson smoothing (without intermediate memory allocations)
+  if (WinFunc == "Boxcar") {
+    a_rep <- sqrt(12) * w_vec_rep
+    Z_mat <- (abs(dist_mat) <= a_rep / 2) / a_rep
+  } else if (WinFunc == "Laplace") {
+    Z_mat <- 1 / (sqrt(2) * w_vec_rep) * exp(-sqrt(2) / w_vec_rep * abs(dist_mat))
+  } else if (WinFunc == "Cauchy") {
+    Z_mat <- 1 / (pi * w_vec_rep * (1 + (dist_mat / w_vec_rep)^2))
+  } else {  # Gauss
+    Z_mat <- stats::dnorm(dist_mat, mean = 0, sd = w_vec_rep)
   }
 
-  # Nadaraya-Watson smoothing with the selected weight function
-  optwp <- numeric(L)
-  for (k in 1:L) {
-    Z <- weight_fun(t[k] - t, optwv / g, WinFunc)
-    optwp[k] <- sum(optwv * Z) / sum(Z)
-  }
+  # BLAS Matrix multiplication
+  optwp <- as.vector((Z_mat %*% optwv) / rowSums(Z_mat))
 
-  # Balloon density estimator (kernel is always Gaussian)
-  yv <- numeric(L)
+  # The dnorm function automatically and correctly recycles the optwp vector across matrix columns
+  Z_nz <- stats::dnorm(dist_nz, mean = 0, sd = optwp)
+
+  # Use BLAS to compute the Balloon estimator
   idx_nz <- which(y_hist > 0)
-  y_hist_nz <- y_hist[idx_nz]
-  t_nz <- t[idx_nz]
-
-  for (k in 1:L) {
-    yv[k] <- sum(y_hist_nz * dt * stats::dnorm(t[k] - t_nz, mean = 0, sd = optwp[k]))
-  }
+  yv <- as.vector(Z_nz %*% (y_hist[idx_nz] * dt))
 
   yv <- yv * N / sum(yv * dt)
 
@@ -244,52 +311,6 @@ CostFunction <- function(y_hist, N, t, dt, optws, WIN, WinFunc, g) {
   Cg <- sum(cg * dt)
 
   list(Cg = Cg, yv = yv, optwp = optwp)
-}
-
-#' Internal helper: FFT convolution with a specified kernel window
-#' @keywords internal
-#' @noRd
-fftkernel_win <- function(x, w, WinFunc = "Boxcar") {
-  L <- length(x)
-  Lmax <- L + 3 * w
-  n <- 2^ceiling(log2(Lmax))
-  X <- stats::fft(c(x, numeric(n - L)))
-
-  # Symmetric frequency vector aligned with R's fft() structure
-  f <- pmin((0:(n - 1)) / n, 1 - (0:(n - 1)) / n)
-
-  # Frequency response of the selected window
-  if (WinFunc == "Boxcar") {
-    a <- sqrt(12) * w
-    t <- 2 * pi * f
-    K <- 2 * sin(a * t/2) / (a * t)
-    K[1] <- 1   # Prevent NaN at zero frequency
-  } else if (WinFunc == "Laplace") {
-    K <- 1 / (1 + (w * 2 * pi * f)^2 / 2)
-  } else if (WinFunc == "Cauchy") {
-    K <- exp(-w * abs(2 * pi * f))
-  } else { # Gauss
-    K <- exp(-0.5 * (w * 2 * pi * f)^2)
-  }
-
-  y <- Re(stats::fft(X * K, inverse = TRUE)) / n
-  return(y[1:L])
-}
-
-#' Internal helper: Weight function values for Nadaraya-Watson regression
-#' @keywords internal
-#' @noRd
-weight_fun <- function(x, w, WinFunc = "Boxcar") {
-  if (WinFunc == "Boxcar") {
-    a <- sqrt(12) * w
-    return( (abs(x) <= a/2) / a )
-  } else if (WinFunc == "Laplace") {
-    return( 1/(sqrt(2)*w) * exp(-sqrt(2)/w * abs(x)) )
-  } else if (WinFunc == "Cauchy") {
-    return( 1 / (pi * w * (1 + (x/w)^2)) )
-  } else {  # Gauss
-    return( stats::dnorm(x, mean = 0, sd = w) )
-  }
 }
 
 #' @title Locally Adaptive 2D Kernel Density Estimation (Abramson's Method)
@@ -332,7 +353,10 @@ ssvkernel2d <- function(x, y = NULL, n_grid = 100, sensitivity = 0.5, ncores = g
   # The geometric mean g is computed only over points with positive pilot density;
   # using full N when some values are zero would underestimate g and inflate lambda.
   pos <- pilot_density_at_points > 0
-  g   <- exp(sum(log(pilot_density_at_points[pos])) / sum(pos))
+
+  # Statistical floor to prevent division by zero in pathological cases
+  g <- if (any(pos)) exp(mean(log(pilot_density_at_points[pos]))) else 1
+
   lambda <- (pilot_density_at_points / g) ^ (-sensitivity)
 
   # Local bandwidths for each specific point
@@ -381,7 +405,8 @@ print.ssvkernel <- function(x, ...) {
 #'
 #' Draws the locally adaptive kernel density curve. When bootstrap confidence
 #' intervals are stored (\code{nbs > 0}), a shaded 90% band is added.
-#' Raw data points and a rug are plotted along the x-axis.
+#' A rug and jittered points are drawn in a reserved strip BELOW y = 0
+#' (so they never overlap the density curve).
 #'
 #' @export
 #' @param x An object of class \code{"ssvkernel"}.
@@ -404,9 +429,6 @@ plot.ssvkernel <- function(x,
     dots$main <- paste0("Adaptive KDE  (gamma = ", round(x$gamma, 4), ")")
   }
 
-  xlab_val <- dots$xlab
-  ylab_val <- dots$ylab
-
   dots_top <- dots
   dots_top$x <- x$x
   dots_top$y <- x$y
@@ -414,30 +436,42 @@ plot.ssvkernel <- function(x,
   dots_top$lwd <- 2
   dots_top$col <- col
 
-  # Ensure the Y-axis starts at 0
+  # Reserve a bottom strip (~10% of y_max below zero) for the data strip
+  # (rug + jittered points), consistent with plot.sshist / plot.sskernel.
   if (!"ylim" %in% names(dots_top)) {
     max_y <- max(x$y, if (has_boot) x$confb95[2L, ] else NULL, na.rm = TRUE)
-    dots_top$ylim <- c(0, max_y * 1.05)
+    dots_top$ylim <- c(-max_y * 0.10, max_y * 1.05)
   }
+
+  # Suppress the default y-axis: the negative part of ylim is reserved for
+  # the data strip and should NOT show negative density ticks.
+  dots_top$yaxt <- "n"
 
   # Main plot
   do.call(plot, dots_top)
 
-  # 1. Rug plot
+  # Redraw a clean y-axis with only non-negative ticks
+  usr <- par("usr")
+  y_ticks <- pretty(c(0, usr[4]))
+  y_ticks <- y_ticks[y_ticks >= 0 & y_ticks <= usr[4]]
+  axis(2, at = y_ticks, las = 1)
+
+  # Subtle separator line at the x-axis (y = 0)
+  abline(h = 0, col = "gray70", lwd = 0.5)
+
+  # 1. Rug at the bottom of the reserved strip
   rug(x$data, col = adjustcolor("gray40", alpha.f = 0.5))
 
-  # 2. Jittered points
-  # Get current plot area coordinates
-  usr <- par("usr")
+  # 2. Jittered points ABOVE the rug, but BELOW y = 0.
+  # Layout (within the bottom strip of height 0.10 * y_max):
+  #   - rug ticks:    usr[3]            .. usr[3] + 3% * y_range   (default)
+  #   - jitter band:  usr[3] + 4%*range .. usr[3] + 8%*range       (no overlap with rug)
   y_range <- usr[4] - usr[3]
-
-  # Elevate the base line for points to 2% of the plot height
-  y_base <- rep(usr[3] + y_range * 0.02, length(x$data))
+  y_base  <- rep(usr[3] + y_range * 0.06, length(x$data))
 
   points(
     x = x$data,
-    # Jitter scatters points up/down by 1.5% of the plot height
-    y = jitter(y_base, amount = y_range * 0.015),
+    y = jitter(y_base, amount = y_range * 0.02),
     pch = 16,
     cex = 0.6,
     col = adjustcolor(col, alpha.f = 0.4)
@@ -470,7 +504,7 @@ print.ssvkernel2d <- function(x, ...) {
   cat("Grid Size:          ", length(x$x_grid), "x", length(x$y_grid), "\n")
   cat("Lambda Range:       ",
       format(min(lam), digits = 3), "--", format(max(lam), digits = 3),
-      "  (median", format(median(lam), digits = 3), ")\n")
+      "  (median", format(stats::median(lam), digits = 3), ")\n")
   invisible(x)
 }
 

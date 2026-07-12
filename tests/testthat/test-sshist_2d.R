@@ -99,3 +99,19 @@ test_that("plot.sshist_2d runs without error", {
   expect_silent(plot(res))
   dev.off()
 })
+
+# ── Iris dataset ─────────────────────────────────────────────────────────────
+
+test_that("sshist_2d returns expected values for iris pairs", {
+  res <- sshist_2d(iris$Sepal.Length, iris$Sepal.Width)
+  expect_equal(res$opt_nx, 6L)
+  expect_equal(res$opt_ny, 7L)
+  expect_equal(res$opt_dx, 0.6, tolerance = 1e-6)
+  expect_equal(res$opt_dy, 0.342857, tolerance = 1e-5)
+
+  res <- sshist_2d(iris$Petal.Length, iris$Petal.Width)
+  expect_equal(res$opt_nx, 23L)
+  expect_equal(res$opt_ny, 11L)
+  expect_equal(res$opt_dx, 0.256522, tolerance = 1e-5)
+  expect_equal(res$opt_dy, 0.218182, tolerance = 1e-5)
+})

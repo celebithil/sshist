@@ -261,7 +261,9 @@ sshist_2d <- function(x, y = NULL, n_min = 2L, n_max = 200L) {
 
 #' Plot method for sshist objects
 #'
-#' Produces single-panel histogram
+#' Produces single-panel histogram with a jittered-data strip drawn BELOW the
+#' x-axis (in a reserved negative-y band), so that the jittered points do not
+#' overlap with the histogram bars.
 #'
 #' @export
 #' @param x An object of class \code{"sshist"}.
@@ -271,19 +273,53 @@ plot.sshist <- function(x, ...) {
   dots <- list(...)
   if (!"xlab" %in% names(dots)) dots$xlab <- "Data"
   if (!"main" %in% names(dots)) dots$main <- paste0("Optimal Histogram (N = ", x$opt_n, ")")
+
+  # Pre-compute histogram to obtain y_max (needed to set a y-axis limit
+  # that reserves a bottom strip below y = 0 for the jittered points).
+  h <- hist(x$data, breaks = x$edges, plot = FALSE)
+  y_max <- max(h$density)
+
+  # Reserve a bottom strip (~10% of y_max below zero) for the data strip
+  # (rug + jittered points), so they never overlap the histogram bars.
+  if (!"ylim" %in% names(dots)) {
+    dots$ylim <- c(-y_max * 0.10, y_max * 1.05)
+  }
+
+  # Suppress the default y-axis: the negative part of ylim is reserved for
+  # the data strip and should NOT show negative density ticks.
+  dots$yaxt <- "n"
+
   dots$x <- x$data
   dots$breaks <- x$edges
-  dots$freq <- FALSE
   dots$col <- "lightblue"
   dots$border <- "white"
   do.call(hist, dots)
-  rug(x$data)
 
-  y_max <- par("usr")[4]
+  # Redraw a clean y-axis with only non-negative ticks
+  usr <- par("usr")
+  y_ticks <- pretty(c(0, usr[4]))
+  y_ticks <- y_ticks[y_ticks >= 0 & y_ticks <= usr[4]]
+  axis(2, at = y_ticks, las = 1)
+
+  # Subtle separator line at the x-axis (y = 0) — visually delimits the
+  # data strip from the histogram area.
+  abline(h = 0, col = "gray70", lwd = 0.5)
+
+  # Rug at the bottom of the reserved strip (uses usr[3] as the baseline).
+  rug(x$data, col = adjustcolor("gray40", alpha.f = 0.5))
+
+  # Jittered points ABOVE the rug, but BELOW y = 0.
+  # Layout (within the bottom strip of height 0.10 * y_max):
+  #   - rug ticks:    usr[3]            .. usr[3] + 3% * y_range   (default)
+  #   - jitter band:  usr[3] + 4%*range .. usr[3] + 8%*range       (no overlap with rug)
+  y_range <- usr[4] - usr[3]
+  y_base  <- rep(usr[3] + y_range * 0.06, length(x$data))
+
   points(
     x = x$data,
-    y = jitter(rep(0, length(x$data)), amount = y_max * 0.02),
+    y = jitter(y_base, amount = y_range * 0.02),
     pch = 16,
+    cex = 0.6,
     col = adjustcolor("darkred", alpha.f = 0.4)
   )
 }

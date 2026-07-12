@@ -10,10 +10,9 @@ vignette: >
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment  = "#>",
+  collapse  = TRUE,
+  comment   = "#>",
   fig.width = 7,
-  fig.height = 5,
   fig.align = "center"
 )
 ```
@@ -46,7 +45,7 @@ The `sshist()` function returns an optimal set of breakpoints (`edges`). Instead
 
 *Note: By explicitly providing `breaks`, we bypass ggplot2's default alignment and `pretty()` binning logic, ensuring the histogram is mathematically exact and perfectly anchored to the data's true domain.*
 
-```{r ggplot-sshist, eval = has_ggplot2}
+```{r ggplot-sshist, fig.height = 4, eval = has_ggplot2}
 data(faithful)
 
 # 1. Calculate optimal binning parameters
@@ -76,7 +75,7 @@ For kernel estimations, the functions return evaluation coordinates `x` and dens
 
 A "heavy" visualization pattern is to show the density estimate on top.
 
-```{r ggplot-kde-1d, fig.height=7, eval = has_ggplot2}
+```{r ggplot-kde-1d, fig.height = 4, eval = has_ggplot2}
 # Define a shared grid for perfect alignment
 shared_grid <- seq(min(faithful$waiting), max(faithful$waiting), length.out = 500)
 
@@ -111,7 +110,7 @@ The `ssvkernel` function uses Nadaraya-Watson kernel regression to smooth the lo
 
 We can visually compare how different analytical window functions ("Boxcar", "Gauss", "Laplace", "Cauchy") influence the final adaptive density estimate.
 
-```{r ggplot-winfunc-comparison, fig.height=4, eval = has_ggplot2}
+```{r ggplot-winfunc-comparison, fig.height = 4, eval = has_ggplot2}
 # Run adaptive estimators with all available window functions
 res_boxcar  <- ssvkernel(faithful$waiting, tin = shared_grid, WinFunc = "Boxcar")
 res_gauss   <- ssvkernel(faithful$waiting, tin = shared_grid, WinFunc = "Gauss")
@@ -151,7 +150,7 @@ For 2D space, we analyze `eruptions` duration and `waiting` time simultaneously.
 
 `sshist_2d()` calculates the mathematically ideal grid partitions for X and Y independently. In `ggplot2`, we can use `stat_bin2d` and supply the optimal number of bins or bin widths calculated by the algorithm to ensure object-driven plotting.
 
-```{r ggplot-sshist2d, fig.asp=0.85, eval = has_ggplot2}
+```{r ggplot-sshist2d, fig.width = 6, fig.height = 6, eval = has_ggplot2}
 res_hist2d <- sshist_2d(faithful$eruptions, faithful$waiting)
 
 # Extract optimal bin counts or widths if explicit
@@ -181,7 +180,7 @@ Our 2D KDE functions return optimized matrices (`z`). We can unravel these matri
 
 Let's run both `sskernel2d` (Fixed) and `ssvkernel2d` (Adaptive) and display them side-by-side using `patchwork` to visualize the exact differences in smoothing patterns.
 
-```{r ggplot-kde2d, fig.width=11, fig.height=5.5, eval = has_ggplot2}
+```{r ggplot-kde2d, fig.width = 11, fig.height = 5.5, eval = has_ggplot2}
 # Compute densities on a 150x150 evaluation grid
 grid_res <- 150
 res_2d_fixed <- sskernel2d(faithful$waiting, faithful$eruptions, n_grid = grid_res)

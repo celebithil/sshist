@@ -57,6 +57,8 @@ devtools::install_github("celebithil/sshist")
 
 - https://www.neuralengine.org/res/histogram.html
 
+- https://www.neuralengine.org/res/kernel.html
+
 - https://github.com/shimazaki/density_estimation
 
 - https://s-shinomoto.com/toolbox/sshist/hist.html

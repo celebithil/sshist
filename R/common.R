@@ -10,8 +10,7 @@ pkg_has_boot <- function() {
 #' @noRd
 fftkernel_1d <- function(x, w) {
   L <- length(x)
-
-  Lmax <- L + 3 * w
+  Lmax <- max(1, L + 3 * w)
   n <- 2^ceiling(log2(Lmax))
   X <- stats::fft(c(x, numeric(n - L)))
 

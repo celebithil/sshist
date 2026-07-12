@@ -15,5 +15,7 @@
 No return value; called for its side effect of producing a plot.
 }
 \description{
-Produces single-panel histogram
+Produces single-panel histogram with a jittered-data strip drawn BELOW the
+x-axis (in a reserved negative-y band), so that the jittered points do not
+overlap with the histogram bars.
 }

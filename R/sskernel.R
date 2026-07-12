@@ -340,7 +340,8 @@ print.sskernel <- function(x, ...) {
 #'
 #' Draws the optimal fixed-bandwidth kernel density curve. When bootstrap
 #' confidence intervals are stored in the object (\code{nbs > 0}), a shaded
-#' 90% band is added automatically. Raw data points and a rug are plotted along the x-axis.
+#' 90% band is added automatically. A rug and jittered points are drawn in a
+#' reserved strip BELOW y = 0 (so they never overlap the density curve).
 #'
 #' @export
 #' @param x An object of class \code{"sskernel"}.
@@ -365,14 +366,28 @@ plot.sskernel <- function(x,
   dots$lwd <- 2
   dots$col <- col
 
-  # Ensure the Y-axis starts at 0
+  # Reserve a bottom strip (~10% of y_max below zero) for the data strip
+  # (rug + jittered points), consistent with plot.sshist / plot.ssvkernel.
   if (!"ylim" %in% names(dots)) {
     max_y <- max(x$y, if (!is.null(x$confb95)) x$confb95[2L, ] else NULL, na.rm = TRUE)
-    dots$ylim <- c(0, max_y * 1.05)
+    dots$ylim <- c(-max_y * 0.10, max_y * 1.05)
   }
+
+  # Suppress the default y-axis: the negative part of ylim is reserved for
+  # the data strip and should NOT show negative density ticks.
+  dots$yaxt <- "n"
 
   # Main plot
   do.call(plot, dots)
+
+  # Redraw a clean y-axis with only non-negative ticks
+  usr <- par("usr")
+  y_ticks <- pretty(c(0, usr[4]))
+  y_ticks <- y_ticks[y_ticks >= 0 & y_ticks <= usr[4]]
+  axis(2, at = y_ticks, las = 1)
+
+  # Subtle separator line at the x-axis (y = 0)
+  abline(h = 0, col = "gray70", lwd = 0.5)
 
   # Confidence interval band
   if (!is.null(x$confb95)) {
@@ -384,22 +399,19 @@ plot.sskernel <- function(x,
   }
 
   # --- DATA PLOTTING BLOCK ---
-  # 1. Rug plot (standard for KDE)
+  # 1. Rug at the bottom of the reserved strip
   rug(x$data, col = adjustcolor("gray40", alpha.f = 0.5))
 
-  # 2. Jittered points
-  # Get current plot area coordinates: c(x1, x2, y1, y2)
-  usr <- par("usr")
+  # 2. Jittered points ABOVE the rug, but BELOW y = 0.
+  # Layout (within the bottom strip of height 0.10 * y_max):
+  #   - rug ticks:    usr[3]            .. usr[3] + 3% * y_range   (default)
+  #   - jitter band:  usr[3] + 4%*range .. usr[3] + 8%*range       (no overlap with rug)
   y_range <- usr[4] - usr[3]
-
-  # Elevate the base line for points to 2% of the plot height
-  # so they don't stick directly to the x-axis bounds
-  y_base <- rep(usr[3] + y_range * 0.02, length(x$data))
+  y_base  <- rep(usr[3] + y_range * 0.06, length(x$data))
 
   points(
     x = x$data,
-    # Jitter scatters points up/down by 1.5% of the plot height
-    y = jitter(y_base, amount = y_range * 0.015),
+    y = jitter(y_base, amount = y_range * 0.02),
     pch = 16,
     cex = 0.6,
     col = adjustcolor(col, alpha.f = 0.4)

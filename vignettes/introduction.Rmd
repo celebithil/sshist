@@ -9,9 +9,10 @@ vignette: >
 
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment  = "#>",
-  fig.width = 7
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width = 7,
+  fig.align = "center"
 )
 ```
 
@@ -50,7 +51,7 @@ The `sshist` function performs an exhaustive search over candidate bin counts to
 
 ### Comparison with the standard approach
 
-```{r comparison, fig.asp = 0.5}
+```{r comparison, fig.height = 3.8}
 data(faithful)
 x_data <- faithful$eruptions
 
@@ -75,7 +76,7 @@ par(oldpar)
 ### The S3 object
 `sshist()` returns an object of class `"sshist"`. The `plot()` method draws the optimal histogram with a data rug.
 
-```{r sshist-print}
+```{r sshist-print, fig.height = 4}
 print(res)
 plot(res)
 ```
@@ -100,7 +101,7 @@ For smooth continuous distributions, `sskernel` evaluates a single fixed global 
 
 Estimates a 1D density using a Gaussian kernel with the globally optimal bandwidth.
 
-```{r sskernel, fig.asp = 0.6}
+```{r sskernel, fig.height = 4}
 res_k <- sskernel(x_data)
 print(res_k)
 plot(res_k, xlab = "Eruption duration (min)")
@@ -110,7 +111,7 @@ plot(res_k, xlab = "Eruption duration (min)")
 
 Uses a stiffness parameter `gamma` (optimized via MISE) to control how much the bandwidth can vary locally. A Nadaraya–Watson smoother with the selected window function (`WinFunc`) stabilizes the bandwidth sequence.
 
-```{r ssvkernel, fig.asp = 0.6}
+```{r ssvkernel, fig.height = 4}
 res_sv <- ssvkernel(x_data)
 print(res_sv)
 plot(res_sv, xlab = "Eruption duration (min)")
@@ -122,7 +123,7 @@ By setting the `nbs` parameter, you can instruct the function to perform a multi
 
 When bootstrap intervals are calculated, the S3 `plot()` method automatically overlays a 90% confidence band (between the 5th and 95th percentiles).
 
-```{r bootstrap-example, fig.asp = 0.6}
+```{r bootstrap-example, fig.height = 4}
 # Run 300 bootstrap iterations using 2 cores
 res_boot <- sskernel(x_data, nbs = 300)
 print(res_boot)
@@ -165,7 +166,7 @@ Solves the X and Y bin-count problem simultaneously using the same MISE cost fun
 * `n_min`: Integer. Minimum number of bins per axis (default `2`).
 * `n_max`: Integer or `NULL`. Maximum number of bins per axis (default `200`). Automatically clamped to the data resolution limit.
 
-```{r sshist-2d, fig.asp = 0.85}
+```{r sshist-2d, fig.width = 6, fig.height = 6}
 res_2d <- sshist_2d(faithful$waiting, faithful$eruptions)
 print(res_2d)
 
@@ -186,7 +187,7 @@ plot(res_2d, xlab = "Waiting time (min)", ylab = "Eruption duration (min)")
 
 **`sskernel2d`** finds the globally optimal isotropic bandwidth. To handle variables on different scales, the data are internally standardized before optimization; the resulting bandwidth is then rescaled back to each original axis.
 
-```{r kde2d-fixed, fig.asp = 1}
+```{r kde2d-fixed, fig.width = 6, fig.height = 6}
 df <- faithful   # eruptions: ~2-5 min,  waiting: ~40-90 min
 
 # Fixed global bandwidth (C++ accelerated)
@@ -199,7 +200,7 @@ plot(res_2d_fixed,
 
 **`ssvkernel2d`** wraps `sskernel2d` as a pilot estimator and applies Abramson's square-root law to derive a per-point local bandwidth.
 
-```{r kde2d-adap, fig.asp = 1}
+```{r kde2d-adap, fig.width = 6, fig.height = 6}
 # Locally adaptive bandwidth (Abramson's method)
 res_2d_adap <- ssvkernel2d(df$eruptions, df$waiting,
                             n_grid = 256, sensitivity = 0.5)
@@ -220,6 +221,8 @@ The adaptive estimator dramatically sharpens the two high-density clusters while
 - Shimazaki, H. and Shinomoto, S. (2010). Kernel bandwidth optimization in spike rate estimation. *Journal of Computational Neuroscience*, **29**(1–2), 171–182. [doi:10.1007/s10827-009-0180-4](https://doi.org/10.1007/s10827-009-0180-4)
 
 - https://www.neuralengine.org/res/histogram.html
+
+- https://www.neuralengine.org/res/kernel.html
 
 - https://github.com/shimazaki/density_estimation
 

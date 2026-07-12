@@ -29,5 +29,6 @@ No return value; called for its side effect of producing a plot.
 \description{
 Draws the locally adaptive kernel density curve. When bootstrap confidence
 intervals are stored (\code{nbs > 0}), a shaded 90\% band is added.
-Raw data points and a rug are plotted along the x-axis.
+A rug and jittered points are drawn in a reserved strip BELOW y = 0
+(so they never overlap the density curve).
 }

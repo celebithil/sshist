@@ -106,3 +106,17 @@ test_that("plot.ssvkernel2d runs without error", {
   expect_silent(plot(res))
   dev.off()
 })
+
+# ── Iris dataset ─────────────────────────────────────────────────────────────
+
+test_that("ssvkernel2d returns expected values for iris pairs", {
+  res <- ssvkernel2d(iris$Sepal.Length, iris$Sepal.Width, n_grid = 30)
+  expect_equal(res$pilot_wx, 0.27785, tolerance = 1e-4)
+  expect_equal(res$pilot_wy, 0.14625, tolerance = 1e-4)
+  expect_true(all(res$z >= 0))
+
+  res <- ssvkernel2d(iris$Petal.Length, iris$Petal.Width, n_grid = 30)
+  expect_equal(res$pilot_wx, 0.16898, tolerance = 1e-4)
+  expect_equal(res$pilot_wy, 0.07296, tolerance = 1e-4)
+  expect_true(all(res$z >= 0))
+})

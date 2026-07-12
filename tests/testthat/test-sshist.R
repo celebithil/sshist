@@ -110,3 +110,23 @@ test_that("plot.sshist runs without error", {
   expect_silent(plot(res))
   dev.off()
 })
+
+# ── Iris dataset ─────────────────────────────────────────────────────────────
+
+test_that("sshist returns expected values for iris columns", {
+  res <- sshist(iris$Sepal.Length)
+  expect_equal(res$opt_n, 15L)
+  expect_equal(res$opt_d, 0.24, tolerance = 1e-6)
+
+  res <- sshist(iris$Sepal.Width)
+  expect_equal(res$opt_n, 10L)
+  expect_equal(res$opt_d, 0.24, tolerance = 1e-6)
+
+  res <- sshist(iris$Petal.Length)
+  expect_equal(res$opt_n, 25L)
+  expect_equal(res$opt_d, 0.236, tolerance = 1e-3)
+
+  res <- sshist(iris$Petal.Width)
+  expect_equal(res$opt_n, 12L)
+  expect_equal(res$opt_d, 0.2, tolerance = 1e-6)
+})

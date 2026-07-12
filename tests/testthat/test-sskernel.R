@@ -115,3 +115,34 @@ test_that("plot.sskernel works with bootstrap confidence band", {
   expect_silent(plot(res))
   dev.off()
 })
+
+# ── Iris dataset ─────────────────────────────────────────────────────────────
+
+test_that("sskernel returns expected values for iris columns", {
+  res <- sskernel(iris$Sepal.Length)
+  expect_equal(res$optw, 0.38968, tolerance = 1e-4)
+  expect_equal(length(res$x), 37L)
+  expect_equal(res$x[1], 4.3, tolerance = 1e-6)
+  expect_equal(res$x[37], 7.9, tolerance = 1e-6)
+  expect_equal(res$y[1], 0.117690, tolerance = 1e-5)
+  dt <- min(diff(res$x))
+  expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
+
+  res <- sskernel(iris$Sepal.Width)
+  expect_equal(res$optw, 0.2, tolerance = 1e-6)
+  expect_equal(length(res$x), 25L)
+  expect_equal(res$y[1], 0.066571, tolerance = 1e-5)
+  dt <- min(diff(res$x))
+  expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
+
+  res <- sskernel(iris$Petal.Length)
+  expect_equal(res$optw, 0.2, tolerance = 1e-6)
+  expect_equal(length(res$x), 60L)
+
+  res <- sskernel(iris$Petal.Width)
+  expect_equal(res$optw, 0.2, tolerance = 1e-6)
+  expect_equal(length(res$x), 25L)
+  expect_equal(res$y[1], 0.540645, tolerance = 1e-5)
+  dt <- min(diff(res$x))
+  expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
+})

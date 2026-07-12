@@ -21,5 +21,6 @@ No return value; called for its side effect of producing a plot.
 \description{
 Draws the optimal fixed-bandwidth kernel density curve. When bootstrap
 confidence intervals are stored in the object (\code{nbs > 0}), a shaded
-90\% band is added automatically. Raw data points and a rug are plotted along the x-axis.
+90\% band is added automatically. A rug and jittered points are drawn in a
+reserved strip BELOW y = 0 (so they never overlap the density curve).
 }

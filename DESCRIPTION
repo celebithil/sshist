@@ -1,7 +1,7 @@
 Type: Package
 Package: sshist
 Title: Optimal Density Estimation via Shimazaki-Shinomoto Method
-Version: 0.2.2
+Version: 0.2.3
 Authors@R: person("Daniil", "Popov", , "popov.daniil@gmail.com", role = c("aut", "cre"))
 Description: Implements the Shimazaki-Shinomoto method for optimizing the
     bin width of histograms and the bandwidth of kernel density estimators.

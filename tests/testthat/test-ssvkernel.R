@@ -112,7 +112,7 @@ test_that("ssvkernel returns correct structure", {
 test_that("ssvkernel warns when boot is not available", {
   df  <- read.table("oldfaithful.txt", header = FALSE, col.names = c("eruptions", "waiting"))
   local_mocked_bindings(pkg_has_boot = function() FALSE)
-  expect_warning(ssvkernel(df$waiting, nbs = 15), "boot package not available")
+  expect_warning(ssvkernel(df$waiting, nbs = 15), "The 'boot' package is not installed. Skipping bootstrap CI.")
 })
 
 # ── S3 methods ────────────────────────────────────────────────────────────────
@@ -140,4 +140,37 @@ test_that("plot.ssvkernel works with bootstrap confidence band", {
   res <- ssvkernel(df$waiting, nbs = 10)
   expect_silent(plot(res))
   dev.off()
+})
+
+# ── Iris dataset ─────────────────────────────────────────────────────────────
+
+test_that("ssvkernel returns expected values for iris columns", {
+  res <- ssvkernel(iris$Sepal.Length)
+  expect_equal(res$gamma, 0.945, tolerance = 2e-3)
+  expect_equal(length(res$x), 256L)
+  expect_equal(res$optw_local_min, 0.146, tolerance = 2e-3)
+  expect_equal(res$optw_local_max, 0.553, tolerance = 2e-3)
+  expect_equal(res$y[1], 0.0955, tolerance = 1e-3)
+  dt <- min(diff(res$x))
+  expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
+
+  res <- ssvkernel(iris$Sepal.Width)
+  expect_equal(res$gamma, 0.852, tolerance = 2e-3)
+  expect_equal(res$optw_local_min, 0.0957, tolerance = 2e-3)
+  expect_equal(res$optw_local_max, 0.392, tolerance = 2e-3)
+  dt <- min(diff(res$x))
+  expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
+
+  res <- ssvkernel(iris$Petal.Length)
+  expect_equal(res$gamma, 0.469, tolerance = 2e-3)
+  expect_equal(res$optw_local_min, 0.0955, tolerance = 2e-3)
+  expect_equal(res$optw_local_max, 0.498, tolerance = 2e-3)
+
+  res <- ssvkernel(iris$Petal.Width)
+  expect_equal(res$gamma, 0.849, tolerance = 2e-3)
+  expect_equal(res$optw_local_min, 0.0947, tolerance = 2e-3)
+  expect_equal(res$optw_local_max, 0.377, tolerance = 2e-3)
+  expect_equal(res$y[1], 0.649, tolerance = 1e-3)
+  dt <- min(diff(res$x))
+  expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
 })

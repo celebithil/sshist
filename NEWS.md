@@ -1,3 +1,27 @@
+# sshist 0.2.3
+
+## Performance Improvements
+
+* `ssvkernel()`: replaced iterative FFT smoothing with frequency-domain windowing using `mvfft`, reducing O(M²) FFT calls to O(M) matrix operations.
+* `ssvkernel()`: vectorized `which.min` lookups and precomputed distance matrices for cost evaluation.
+* `ssvkernel()` `CostFunction`: fully vectorized local bandwidth selection, replacing the `for (k in 1:L)` loop with `max.col` and matrix operations.
+* `ssvkernel()`: removed unnecessary `t()` transpose in MVFFT slicing and unused `weight_fun()` helper.
+* `common.R`: fixed edge case in `fftkernel_1d` where `Lmax` could be zero, ensured `max(1, ...)` guard.
+
+## Visual Improvements
+
+* `plot.sshist()`: redesigned data display — jittered points and rug now sit in a reserved negative-y strip below the histogram bars (to avoid overlap).
+* `plot.sskernel()` and `plot.ssvkernel()`: same reserved-strip approach for consistent look across all plot methods.
+* All plot methods: redrawn y-axis showing only non-negative density ticks, with a subtle separator at y = 0.
+
+## New Features
+
+* Added iris dataset tests for all six estimators with concrete reference values (278 total tests).
+
+## Documentation
+
+* Added link references in README.
+
 # sshist 0.2.2
 
 ## CRAN Compliance Fixes
