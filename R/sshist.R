@@ -291,6 +291,7 @@ plot.sshist <- function(x, ...) {
 
   dots$x <- x$data
   dots$breaks <- x$edges
+  dots$freq <- FALSE
   dots$col <- "lightblue"
   dots$border <- "white"
   do.call(hist, dots)
