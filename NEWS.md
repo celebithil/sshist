@@ -1,3 +1,9 @@
+# sshist 0.2.4
+
+## Bug Fixes
+
+* `plot.sshist()`: added `freq = FALSE` to histogram call so the plot correctly displays density instead of frequency.
+
 # sshist 0.2.3
 
 ## Performance Improvements
