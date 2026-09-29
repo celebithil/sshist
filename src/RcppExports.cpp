@@ -85,6 +85,25 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ssvkernel_optimize_gamma_cpp
+Rcpp::List ssvkernel_optimize_gamma_cpp(Rcpp::NumericVector y_hist_r, int N, Rcpp::NumericVector t_r, double dt, Rcpp::NumericMatrix optws_r, Rcpp::NumericVector WIN_r, std::string WinFunc, Rcpp::NumericMatrix dist_mat_r, int n_threads);
+RcppExport SEXP _sshist_ssvkernel_optimize_gamma_cpp(SEXP y_hist_rSEXP, SEXP NSEXP, SEXP t_rSEXP, SEXP dtSEXP, SEXP optws_rSEXP, SEXP WIN_rSEXP, SEXP WinFuncSEXP, SEXP dist_mat_rSEXP, SEXP n_threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type y_hist_r(y_hist_rSEXP);
+    Rcpp::traits::input_parameter< int >::type N(NSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type t_r(t_rSEXP);
+    Rcpp::traits::input_parameter< double >::type dt(dtSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type optws_r(optws_rSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type WIN_r(WIN_rSEXP);
+    Rcpp::traits::input_parameter< std::string >::type WinFunc(WinFuncSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type dist_mat_r(dist_mat_rSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(ssvkernel_optimize_gamma_cpp(y_hist_r, N, t_r, dt, optws_r, WIN_r, WinFunc, dist_mat_r, n_threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_sshist_sshist_cost_cpp", (DL_FUNC) &_sshist_sshist_cost_cpp, 6},
@@ -92,6 +111,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_sshist_compute_sskernel2d_cost_cpp", (DL_FUNC) &_sshist_compute_sskernel2d_cost_cpp, 4},
     {"_sshist_compute_pilot_density_cpp", (DL_FUNC) &_sshist_compute_pilot_density_cpp, 5},
     {"_sshist_compute_kde2d_cpp", (DL_FUNC) &_sshist_compute_kde2d_cpp, 7},
+    {"_sshist_ssvkernel_optimize_gamma_cpp", (DL_FUNC) &_sshist_ssvkernel_optimize_gamma_cpp, 9},
     {NULL, NULL, 0}
 };
 

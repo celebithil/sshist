@@ -21,3 +21,16 @@ fftkernel_1d <- function(x, w) {
   y <- Re(stats::fft(X * K, inverse = TRUE)) / n
   return(y[1:L])
 }
+
+# Helper functions for log-exp transformation
+# Used to improve convexity of the bandwidth optimization landscape.
+# Equivalent to Python's logexp / ilogexp.
+# @keywords internal
+# @noRd
+logexp <- function(z) ifelse(z < 1e2, log(1 + exp(z)), z)
+
+#' @rdname logexp
+#' @keywords internal
+#' @noRd
+ilogexp <- function(z) ifelse(z < 1e2, log(exp(z) - 1), z)
+

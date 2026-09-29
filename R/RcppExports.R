@@ -21,3 +21,7 @@ compute_kde2d_cpp <- function(x, y, gx, gy, wx, wy, n_threads) {
     .Call(`_sshist_compute_kde2d_cpp`, x, y, gx, gy, wx, wy, n_threads)
 }
 
+ssvkernel_optimize_gamma_cpp <- function(y_hist_r, N, t_r, dt, optws_r, WIN_r, WinFunc, dist_mat_r, n_threads) {
+    .Call(`_sshist_ssvkernel_optimize_gamma_cpp`, y_hist_r, N, t_r, dt, optws_r, WIN_r, WinFunc, dist_mat_r, n_threads)
+}
+

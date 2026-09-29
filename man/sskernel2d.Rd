@@ -17,7 +17,7 @@ sskernel2d(
 
 \item{y}{Numeric vector for Y coordinates (required if \code{x} is a vector).}
 
-\item{W}{Optional numeric vector of bandwidths to evaluate. If \code{NULL}, a default log-spaced grid is used.}
+\item{W}{Optional numeric vector of bandwidths to evaluate. If \code{NULL}, a default log-spaced grid (10 pts) with golden section refinement is used.}
 
 \item{n_grid}{Integer specifying the number of grid points for the output density matrix (default: 100).}
 
@@ -37,4 +37,6 @@ An object of class \code{"sskernel2d"} containing:
 \description{
 Computes the optimal global bandwidth for a 2D kernel density estimate
 based on the exact L2 risk (Mean Integrated Squared Error) minimization.
+Uses a two-stage search: a logarithmic grid (10 points, auto-expanding) followed
+by golden section refinement on the logexp-transformed scale.
 }

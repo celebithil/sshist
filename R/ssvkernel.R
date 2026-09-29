@@ -1,14 +1,15 @@
 #' @title Locally Adaptive 1D Kernel Density Estimation (Shimazaki-Shinomoto)
 #' @description Computes locally adaptive bandwidths for 1D distributions
 #' following the method of Shimazaki & Shinomoto (2010). Optimizes the
-#' stiffness constant gamma via a hybrid grid and Brent search on the MISE cost.
+#' stiffness constant gamma via a multi-start (K=5) golden section search
+#' over GS-based intervals, accelerated with C++/OpenMP parallelization.
 #'
 #' @param x Numeric vector of sample points. Missing values (NA) will be removed.
 #' @param tin Optional numeric vector of evaluation points.
 #' @param M Integer, number of bandwidths to examine (default: 80).
 #' @param WinFunc Character string specifying the window function for local weights: "Gauss", "Boxcar", "Laplace", or "Cauchy" (default: "Boxcar").
 #' @param nbs Integer, number of bootstrap samples for confidence intervals. Set to 0 to skip (default: 0).
-#' @param ncores Integer specifying the number of CPU cores to use for bootstrap (default: 1).
+#' @param ncores Integer specifying the number of CPU cores to use for C++/OpenMP gamma optimization and bootstrap (default: 1).
 #'
 #' @return An object of class \code{"ssvkernel"} containing:
 #' \describe{
@@ -25,11 +26,13 @@
 ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores = getOption("sshist.ncores", 1L)) {
   x <- sort(stats::na.omit(x))
 
-  # 1. GRID PROTECTION: Ensure at least 256 points for estimation smoothness,
-  # even if the data is highly discrete (e.g., integer minutes)
+  # 1. Grid matches Python/MATLAB: min(ceil(T/dt_samp), 1000)
   if (is.null(tin)) {
-    raw_points <- ceiling((max(x) - min(x)) / min(diff(unique(x))))
-    n_points <- max(256, min(raw_points, 1000))
+    T_span <- max(x) - min(x)
+    dx <- diff(sort(x))
+    dx <- dx[dx > 0]
+    dt_samp <- if (length(dx) > 0) min(dx) else T_span / 1000
+    n_points <- min(ceiling(T_span / dt_samp), 1000)
     tin <- seq(min(x), max(x), length.out = n_points)
   } else if (length(tin) < 2) {
     stop("Argument 'tin' must have at least 2 points for evaluation.")
@@ -44,7 +47,7 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
   dt_samp <- if (length(dx) > 0) min(dx) else (max(x_ab) - min(x_ab)) / 1000
 
   if (dt_samp > min(diff(tin))) {
-    n_t <- max(256, min(ceiling((max(tin) - min(tin)) / dt_samp), 1000))
+    n_t <- min(ceiling((max(tin) - min(tin)) / dt_samp), 1000)
     t <- seq(min(tin), max(tin), length.out = n_t)
   } else {
     t <- tin
@@ -55,10 +58,6 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
   # 'right = FALSE' strictly mimics Python's np.histogram half-open bins [a, b)
   y_hist <- graphics::hist(x_ab, breaks = breaks, right = FALSE, plot = FALSE)$counts / dt
   L <- length(y_hist)
-
-  # --- NONLINEAR (LOG-EXP) WINDOW GENERATION FROM PYTHON ---
-  logexp <- function(z) ifelse(z < 1e2, log(1 + exp(z)), z)
-  ilogexp <- function(z) ifelse(z < 1e2, log(exp(z) - 1), z)
 
   T_span <- max(t) - min(t)
 
@@ -133,38 +132,14 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
     optws[i, ] <- W_vals[best_idx]
   }
 
-  # --- PRECOMPUTE DISTANCE MATRICES FOR COST FUNCTION ---
+  # --- PRECOMPUTE DISTANCE MATRIX FOR COST FUNCTION ---
   dist_mat <- outer(t, t, "-")
-  idx_nz <- which(y_hist > 0)
-  y_hist_nz <- y_hist[idx_nz]
-  t_nz <- t[idx_nz]
-  dist_nz <- outer(t, t_nz, "-")
 
-  # --- Global Search (Grid Search) ---
-  n_grid <- 15
-  gamma_grid <- seq(1e-4, 1, length.out = n_grid)
-
-  C_coarse <- vapply(gamma_grid, function(g) {
-    CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, g, dist_mat, dist_nz)$Cg
-  }, numeric(1))
-
-  best_idx <- which.min(C_coarse)
-  lower_b <- if (best_idx == 1) 1e-12 else gamma_grid[best_idx - 1]
-  upper_b <- if (best_idx == n_grid) 1 else gamma_grid[best_idx + 1]
-
-  # --- Precise Refinement (Brent's Method) ---
-  opt_res <- stats::optimize(
-    f = function(g) CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, g, dist_mat, dist_nz)$Cg,
-    interval = c(lower_b, upper_b),
-    tol = 1e-5
-  )
-
-  best_gamma <- opt_res$minimum
-
-  # --- Final Calculation ---
-  f_final <- CostFunction(y_hist, N, t, dt, optws, WIN, WinFunc, best_gamma, dist_mat, dist_nz)
-  yopt <- f_final$yv / sum(f_final$yv * dt)
-  optw <- f_final$optwp
+  # --- Global Search (Multi-start via GS intervals, C++/OpenMP) ---
+  opt <- ssvkernel_optimize_gamma_cpp(y_hist, N, t, dt, optws, WIN, WinFunc, dist_mat, ncores)
+  best_gamma <- opt$gamma
+  yopt <- opt$yv / sum(opt$yv * dt)
+  optw <- opt$optwp
 
   # Interpolate to the requested 'tin' grid
   y_final <- stats::approx(t, yopt, xout = tin, rule = 2)$y
@@ -241,76 +216,6 @@ ssvkernel <- function(x, tin = NULL, M = 80, WinFunc = "Boxcar", nbs = 0, ncores
 
   class(result) <- "ssvkernel"
   return(result)
-}
-
-# ==============================================================================
-# --- Internal Helper Functions ---
-# ==============================================================================
-
-#' Internal helper: Compute the cost function for a given gamma
-#' @keywords internal
-#' @noRd
-CostFunction <- function(y_hist, N, t, dt, optws, WIN, WinFunc, g, dist_mat, dist_nz) {
-  L <- length(y_hist)
-  M <- length(WIN)
-
-  # Vectorized computation of local window width (No for loop!)
-  GS <- optws / WIN  # M x L matrix (automatic recycling of WIN vector across columns)
-
-  # Find maxima and minima of each column via max.col (super-fast)
-  # Transpose because max.col operates on rows
-  idx_max_GS <- max.col(t(GS), ties.method = "first")
-  max_GS <- GS[cbind(idx_max_GS, 1:L)]
-
-  idx_min_GS <- max.col(t(-GS), ties.method = "first")
-  min_GS <- GS[cbind(idx_min_GS, 1:L)]
-
-  # Find the maximum index (idx) where GS >= g
-  # Multiplying logical matrix by seq_len(M) converts TRUE to row numbers (1..M)
-  idx_mat <- (GS >= g) * seq_len(M)
-
-  # ties.method = "last" ensures we take the maximum index
-  # (if all FALSE, it returns M, but we override this below)
-  idx_g <- max.col(t(idx_mat), ties.method = "last")
-
-  # Form the final vector
-  optwv <- g * WIN[idx_g]
-
-  # Apply boundary limits to the entire vector at once
-  optwv[g > max_GS] <- WIN[1]
-  optwv[g < min_GS] <- WIN[M]
-
-  # base R vector recycling
-  w_vec_rep <- rep(optwv / g, each = L)
-
-  # Nadaraya-Watson smoothing (without intermediate memory allocations)
-  if (WinFunc == "Boxcar") {
-    a_rep <- sqrt(12) * w_vec_rep
-    Z_mat <- (abs(dist_mat) <= a_rep / 2) / a_rep
-  } else if (WinFunc == "Laplace") {
-    Z_mat <- 1 / (sqrt(2) * w_vec_rep) * exp(-sqrt(2) / w_vec_rep * abs(dist_mat))
-  } else if (WinFunc == "Cauchy") {
-    Z_mat <- 1 / (pi * w_vec_rep * (1 + (dist_mat / w_vec_rep)^2))
-  } else {  # Gauss
-    Z_mat <- stats::dnorm(dist_mat, mean = 0, sd = w_vec_rep)
-  }
-
-  # BLAS Matrix multiplication
-  optwp <- as.vector((Z_mat %*% optwv) / rowSums(Z_mat))
-
-  # The dnorm function automatically and correctly recycles the optwp vector across matrix columns
-  Z_nz <- stats::dnorm(dist_nz, mean = 0, sd = optwp)
-
-  # Use BLAS to compute the Balloon estimator
-  idx_nz <- which(y_hist > 0)
-  yv <- as.vector(Z_nz %*% (y_hist[idx_nz] * dt))
-
-  yv <- yv * N / sum(yv * dt)
-
-  cg <- yv^2 - 2 * yv * y_hist + (2 / (sqrt(2 * pi) * optwp)) * y_hist
-  Cg <- sum(cg * dt)
-
-  list(Cg = Cg, yv = yv, optwp = optwp)
 }
 
 #' @title Locally Adaptive 2D Kernel Density Estimation (Abramson's Method)

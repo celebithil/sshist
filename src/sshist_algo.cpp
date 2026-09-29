@@ -265,3 +265,301 @@ NumericMatrix compute_kde2d_cpp(NumericVector x, NumericVector y,
 
   return Z;
 }
+
+// =========================================================================
+// ssvkernel: Multi-start GS-based gamma optimization (C++/OpenMP)
+// =========================================================================
+
+inline double kernel_boxcar(double d, double w) {
+  double a = std::sqrt(12.0) * w;
+  return (std::abs(d) <= a / 2.0) ? (1.0 / a) : 0.0;
+}
+
+inline double kernel_laplace(double d, double w) {
+  return std::exp(-std::sqrt(2.0) * std::abs(d) / w) / (std::sqrt(2.0) * w);
+}
+
+inline double kernel_cauchy(double d, double w) {
+  double r = d / w;
+  return 1.0 / (M_PI * w * (1.0 + r * r));
+}
+
+inline double kernel_gauss(double d, double w) {
+  return std::exp(-0.5 * d * d / (w * w)) / (std::sqrt(2.0 * M_PI) * w);
+}
+
+struct CostResult {
+  double Cg;
+  std::vector<double> yv;
+  std::vector<double> optwp;
+};
+
+static CostResult compute_cost(
+    const std::vector<double>& y_hist, int N,
+    const std::vector<double>& t, double dt,
+    const std::vector<double>& optws_gs, int M, int L,
+    const std::vector<double>& WIN,
+    const std::string& WinFunc, double g,
+    const std::vector<double>& dist_mat,
+    const std::vector<int>& idx_nz, int n_nz) {
+
+  // Step 1: determine optwv from GS ratios
+  std::vector<double> optwv(L);
+  for (int j = 0; j < L; j++) {
+    int base = j * M;
+    double max_gs = 0.0;
+    double min_gs = 2.0;
+    int last_idx = -1;
+    for (int i = 0; i < M; i++) {
+      double gs = optws_gs[base + i];
+      if (gs > max_gs) max_gs = gs;
+      if (gs < min_gs) min_gs = gs;
+      if (gs >= g) last_idx = i;
+    }
+    if (g > max_gs) {
+      optwv[j] = WIN[0];
+    } else if (g < min_gs) {
+      optwv[j] = WIN[M - 1];
+    } else if (last_idx >= 0) {
+      optwv[j] = g * WIN[last_idx];
+    } else {
+      optwv[j] = WIN[M - 1];
+    }
+  }
+
+  // Step 2: Nadaraya-Watson smoothing (fused loop, no Z_mat allocation)
+  std::vector<double> optwp(L);
+  for (int i = 0; i < L; i++) {
+    double row_sum = 0.0;
+    double w_sum = 0.0;
+    for (int j = 0; j < L; j++) {
+      double d = dist_mat[j * L + i];
+      double w = optwv[j] / g;
+      double z;
+      if (WinFunc == "Boxcar") {
+        z = kernel_boxcar(d, w);
+      } else if (WinFunc == "Laplace") {
+        z = kernel_laplace(d, w);
+      } else if (WinFunc == "Cauchy") {
+        z = kernel_cauchy(d, w);
+      } else { // Gauss
+        z = kernel_gauss(d, w);
+      }
+      row_sum += z;
+      w_sum += z * optwv[j];
+    }
+    optwp[i] = (row_sum > 0) ? (w_sum / row_sum) : optwv[i];
+  }
+
+  // Step 3: Balloon density (fused over non-zero bins)
+  std::vector<double> yv(L, 0.0);
+  for (int i = 0; i < L; i++) {
+    double sd = optwp[i];
+    double inv_sd = 1.0 / sd;
+    double norm = inv_sd / std::sqrt(2.0 * M_PI);
+    double half_inv_sd2 = -0.5 * inv_sd * inv_sd;
+    for (int k = 0; k < n_nz; k++) {
+      int j = idx_nz[k];
+      double d = dist_mat[j * L + i];
+      yv[i] += norm * std::exp(half_inv_sd2 * d * d) * y_hist[j] * dt;
+    }
+  }
+
+  double sum_yv_dt = 0.0;
+  for (int i = 0; i < L; i++) sum_yv_dt += yv[i] * dt;
+  if (sum_yv_dt > 0) {
+    double scale = static_cast<double>(N) / sum_yv_dt;
+    for (int i = 0; i < L; i++) yv[i] *= scale;
+  }
+
+  // Step 4: Cg
+  double Cg = 0.0;
+  double norm_const = 2.0 / std::sqrt(2.0 * M_PI);
+  for (int i = 0; i < L; i++) {
+    double hi = y_hist[i];
+    double cg = yv[i] * yv[i] - 2.0 * yv[i] * hi + (norm_const / optwp[i]) * hi;
+    Cg += cg * dt;
+  }
+
+  return {Cg, std::move(yv), std::move(optwp)};
+}
+
+// [[Rcpp::export]]
+Rcpp::List ssvkernel_optimize_gamma_cpp(
+    Rcpp::NumericVector y_hist_r, int N,
+    Rcpp::NumericVector t_r, double dt,
+    Rcpp::NumericMatrix optws_r,
+    Rcpp::NumericVector WIN_r,
+    std::string WinFunc,
+    Rcpp::NumericMatrix dist_mat_r,
+    int n_threads) {
+
+  int L = y_hist_r.length();
+  int M = WIN_r.length();
+
+  std::vector<double> y_hist(y_hist_r.begin(), y_hist_r.end());
+  std::vector<double> t_vec(t_r.begin(), t_r.end());
+  std::vector<double> WIN(WIN_r.begin(), WIN_r.end());
+  std::vector<double> dist_mat(dist_mat_r.begin(), dist_mat_r.end());
+
+  // optws: column-major, pre-divide by WIN for GS
+  std::vector<double> optws_gs(M * L);
+  for (int i = 0; i < M; i++) {
+    double win_i = WIN[i];
+    for (int j = 0; j < L; j++) {
+      optws_gs[j * M + i] = optws_r(i, j) / win_i;
+    }
+  }
+
+  // non-zero histogram indices
+  std::vector<int> idx_nz;
+  for (int j = 0; j < L; j++)
+    if (y_hist[j] > 0) idx_nz.push_back(j);
+  int n_nz = idx_nz.size();
+
+  // cost lambda (thread-safe: captures const refs to std::vector)
+  auto cost_fn = [&](double g) -> double {
+    return compute_cost(y_hist, N, t_vec, dt, optws_gs, M, L, WIN,
+                        WinFunc, g, dist_mat, idx_nz, n_nz).Cg;
+  };
+
+  double best_gamma;
+  std::vector<double> best_yv, best_optwp;
+
+  // unique sorted GS in (1e-6, 1-1e-6)
+  std::vector<double> GS_all = optws_gs;
+  std::sort(GS_all.begin(), GS_all.end());
+  auto last = std::unique(GS_all.begin(), GS_all.end());
+  GS_all.erase(last, GS_all.end());
+
+  std::vector<double> GS_01;
+  GS_01.reserve(GS_all.size());
+  for (double v : GS_all)
+    if (v > 1e-6 && v < 1.0 - 1e-6) GS_01.push_back(v);
+
+  int n_GS = GS_01.size();
+  int n_intervals = n_GS - 1;
+
+  if (n_intervals < 2) {
+    // Fallback: uniform 100pt grid + golden section
+    std::vector<double> gamma_grid(100);
+    std::vector<double> C_coarse(100);
+    for (int k = 0; k < 100; k++)
+      gamma_grid[k] = 1e-4 + (1.0 - 1e-4) * k / 99.0;
+
+#pragma omp parallel for num_threads(n_threads)
+    for (int k = 0; k < 100; k++)
+      C_coarse[k] = cost_fn(gamma_grid[k]);
+
+    int best_idx = std::min_element(C_coarse.begin(), C_coarse.end()) - C_coarse.begin();
+
+    double a = (best_idx == 0) ? 1e-12 : gamma_grid[best_idx - 1];
+    double b = (best_idx == 99) ? 1.0 : gamma_grid[best_idx + 1];
+
+    const double phi = (std::sqrt(5.0) + 1.0) / 2.0;
+    double c1 = (phi - 1.0) * a + (2.0 - phi) * b;
+    double c2 = (2.0 - phi) * a + (phi - 1.0) * b;
+    double f1 = cost_fn(c1), f2 = cost_fn(c2);
+
+    for (int k = 0; k < 30; k++) {
+      if (std::abs(b - a) <= 1e-5 * (std::abs(c1) + std::abs(c2)) && k > 2) break;
+      if (f1 < f2) {
+        b = c2; c2 = c1; c1 = (phi - 1.0) * a + (2.0 - phi) * b;
+        f2 = f1; f1 = cost_fn(c1);
+      } else {
+        a = c1; c1 = c2; c2 = (2.0 - phi) * a + (phi - 1.0) * b;
+        f1 = f2; f2 = cost_fn(c2);
+      }
+    }
+    best_gamma = (f1 < f2) ? c1 : c2;
+
+    auto res = compute_cost(y_hist, N, t_vec, dt, optws_gs, M, L, WIN,
+                            WinFunc, best_gamma, dist_mat, idx_nz, n_nz);
+    best_yv = std::move(res.yv);
+    best_optwp = std::move(res.optwp);
+
+  } else {
+    // Multi-start via GS intervals
+    int n_mids = n_intervals + 2;
+    std::vector<double> mids(n_mids);
+    mids[0] = GS_01[0] / 2.0;
+    for (int k = 1; k <= n_intervals; k++)
+      mids[k] = (GS_01[k - 1] + GS_01[k]) / 2.0;
+    mids[n_mids - 1] = (GS_01[n_GS - 1] + 1.0) / 2.0;
+
+    std::vector<double> C_mid(n_mids);
+#pragma omp parallel for num_threads(n_threads)
+    for (int k = 0; k < n_mids; k++)
+      C_mid[k] = cost_fn(mids[k]);
+
+    int K = std::min(5, n_mids);
+    std::vector<int> top_idx(K);
+    {
+      std::vector<std::pair<double, int>> sorted(n_mids);
+      for (int k = 0; k < n_mids; k++)
+        sorted[k] = {C_mid[k], k};
+      std::sort(sorted.begin(), sorted.end());
+      for (int k = 0; k < K; k++)
+        top_idx[k] = sorted[k].second;
+    }
+
+    best_gamma = 0.0;
+    double best_C = std::numeric_limits<double>::infinity();
+    std::vector<double> g_results(K);
+    std::vector<double> C_results(K, std::numeric_limits<double>::infinity());
+
+    int n_gs_threads = std::min(K, n_threads > 0 ? n_threads : 1);
+#pragma omp parallel for num_threads(n_gs_threads)
+    for (int k = 0; k < K; k++) {
+      int idx = top_idx[k];
+      double a, b;
+      if (idx == 0) {
+        a = 1e-8; b = GS_01[0];
+      } else if (idx == n_mids - 1) {
+        a = GS_01[n_GS - 1]; b = 1.0;
+      } else {
+        a = GS_01[idx - 1]; b = GS_01[idx];
+      }
+
+      if (b - a < 1e-12) continue;
+
+      const double phi = (std::sqrt(5.0) + 1.0) / 2.0;
+      double c1 = (phi - 1.0) * a + (2.0 - phi) * b;
+      double c2 = (2.0 - phi) * a + (phi - 1.0) * b;
+      double f1 = cost_fn(c1), f2 = cost_fn(c2);
+
+      for (int iter = 0; iter < 30; iter++) {
+        if (std::abs(b - a) <= 1e-5 * (std::abs(c1) + std::abs(c2)) && iter > 2) break;
+        if (f1 < f2) {
+          b = c2; c2 = c1; c1 = (phi - 1.0) * a + (2.0 - phi) * b;
+          f2 = f1; f1 = cost_fn(c1);
+        } else {
+          a = c1; c1 = c2; c2 = (2.0 - phi) * a + (phi - 1.0) * b;
+          f1 = f2; f2 = cost_fn(c2);
+        }
+      }
+      g_results[k] = (f1 < f2) ? c1 : c2;
+      C_results[k] = cost_fn(g_results[k]);
+    }
+
+    for (int k = 0; k < K; k++) {
+      if (C_results[k] < best_C) {
+        best_C = C_results[k];
+        best_gamma = g_results[k];
+      }
+    }
+
+    auto res = compute_cost(y_hist, N, t_vec, dt, optws_gs, M, L, WIN,
+                            WinFunc, best_gamma, dist_mat, idx_nz, n_nz);
+    best_yv = std::move(res.yv);
+    best_optwp = std::move(res.optwp);
+  }
+
+  return Rcpp::List::create(
+    Rcpp::Named("gamma")  = best_gamma,
+    Rcpp::Named("yv")     = Rcpp::wrap(best_yv),
+    Rcpp::Named("optwp")  = Rcpp::wrap(best_optwp)
+  );
+}
+
+

@@ -13,3 +13,4 @@
 ^doc$
 ^Meta$
 ^profiling$
+^test_script\.R$

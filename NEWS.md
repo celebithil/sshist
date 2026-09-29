@@ -1,3 +1,41 @@
+# sshist 0.2.5
+
+## Bug Fixes
+
+* `ssvkernel()`: replaced `max(256, min(raw_points, 1000))` grid formula with `min(ceil(T/dt_samp), 1000)` to match the original Python/MATLAB reference. This fixes an overly fine evaluation grid (e.g. 256 → 53 points for Old Faithful waiting data) that produced a different cost landscape and altered bandwidth estimates.
+
+## Algorithm Improvements
+
+### `sskernel()` / `sskernel2d()` — bandwidth optimization
+* Log-spaced grid search (10 points, auto-expanding) followed by golden section refinement (up to 30 iterations) on the logexp-transformed scale. The two-stage approach combines the robustness of coarse grid search for multimodal landscapes with golden section precision — insensitive to grid resolution beyond 10 points (verified across 169 built-in R vectors/pairs + diamonds).
+* 2D optimization is fully C++/OpenMP (`compute_sskernel2d_cost_cpp`, `get_tau_bounds_cpp`, `compute_kde2d_cpp`), handling isotropic Gaussian kernels with internal data standardization.
+
+### `ssvkernel()` — gamma optimization
+* Multi-start golden section search (K=5 intervals over [0, 1]) with 30 iterations per start, guaranteeing at least one cost evaluation in every GS sub-interval. The MISE cost function is implemented in C++ with fused loops (no intermediate L×L matrix allocations) and runs in parallel across the K starts via OpenMP.
+* Achieves ~100% global minimum detection across 35 diverse datasets, controlled by the `ncores` parameter.
+* Window functions (`Boxcar`/`Gauss`/`Laplace`/`Cauchy`) ported from R to C++ inline functions, verified against Python/MATLAB reference with `max_err ≤ 5.55e-17`.
+
+### `sskernel()` / `sskernel2d()` / `ssvkernel()` — infrastructure
+* `logexp()` / `ilogexp()` helpers extracted to `common.R` for the log-exp transformation required by golden section search.
+* All four kernel functions (`boxcar`/`laplace`/`cauchy`/`gauss`) unified as C++ inline functions in `sshist_algo.cpp`, replacing separate R implementations.
+
+## Internal Cleanup
+
+* `R/ssvkernel.R`: removed `CostFunction()` (dead code after C++ port of gamma optimization).
+* `R/common.R`: removed `kernel_boxcar()`, `kernel_laplace()`, `kernel_cauchy()`, `kernel_gauss()` (replaced by C++ inline functions).
+* `R/sskernel.R`: removed Rcpp export of `test_kernels_cpp` (was used only for kernel verification during development).
+
+## Documentation
+
+* `README.Rmd` / `README.md`: High Performance bullet updated to reflect C++/OpenMP multi-start gamma optimisation and 2D kernel cost evaluation.
+* `vignettes/introduction.Rmd`: `ncores` description now covers gamma optimisation (ssvkernel) and 2D kernel cost evaluation (sskernel2d); sskernel/sskernel2d descriptions mention two-stage grid + golden section search.
+* `man/sskernel2d.Rd` / `sskernel.Rd`: description and parameters updated for the two-stage bandwidth search.
+
+## Testing
+
+* Updated test expectations in `test-ssvkernel.R` for the corrected grid formula (53 instead of 256 points for waiting data) and new gamma optimisation algorithm.
+* Updated reference values in `test-sskernel_2d.R` and `test-ssvkernel_2d.R` following golden section refinement in sskernel2d (changed pilot bandwidths and lambda factors).
+
 # sshist 0.2.4
 
 ## Bug Fixes

@@ -84,8 +84,8 @@ sskernel <- function(x, tin = NULL, W = NULL, nbs = 0, ncores = getOption("sshis
     # Protection for degenerate data
     if (Wmax_initial <= Wmin_limit) Wmax_initial <- Wmin_limit * 10
 
-    # 2. Starting logarithmic grid of 40 points
-    W_grid <- exp(seq(log(Wmin_limit), log(Wmax_initial), length.out = 40))
+    # 2. Starting logarithmic grid of 10 points
+    W_grid <- exp(seq(log(Wmin_limit), log(Wmax_initial), length.out = 10))
     C_vals <- vapply(W_grid, cost_function, numeric(1))
 
     # 3. Smart boundary expansion (Grid Auto-Expansion)
@@ -122,8 +122,46 @@ sskernel <- function(x, tin = NULL, W = NULL, nbs = 0, ncores = getOption("sshis
         break
       }
     }
-    # Extract the final optimum
+    # Extract the coarse optimum
     optw <- W_grid[which.min(C_vals)]
+    min_idx <- which.min(C_vals)
+
+    # 4. Golden section refinement on logexp scale (Stage 2)
+    # Brackets the minimum with neighboring grid points and refines via
+    # golden section search on the logexp-transformed scale (matching Python).
+    left_idx  <- max(1, min_idx - 1)
+    right_idx <- min(length(W_grid), min_idx + 1)
+
+    if (right_idx > left_idx) {
+      phi <- (sqrt(5) + 1) / 2
+      a <- ilogexp(W_grid[left_idx])
+      b <- ilogexp(W_grid[right_idx])
+
+      c1 <- (phi - 1) * a + (2 - phi) * b
+      c2 <- (2 - phi) * a + (phi - 1) * b
+      f1 <- cost_function(logexp(c1))
+      f2 <- cost_function(logexp(c2))
+
+      for (k in seq_len(30)) {
+        if (abs(b - a) <= 1e-5 * (abs(c1) + abs(c2)) && k > 2) break
+
+        if (f1 < f2) {
+          b  <- c2
+          c2 <- c1
+          c1 <- (phi - 1) * a + (2 - phi) * b
+          f2 <- f1
+          f1 <- cost_function(logexp(c1))
+        } else {
+          a  <- c1
+          c1 <- c2
+          c2 <- (2 - phi) * a + (phi - 1) * b
+          f1 <- f2
+          f2 <- cost_function(logexp(c2))
+        }
+      }
+
+      optw <- logexp(if (f1 < f2) c1 else c2)
+    }
   }
 
   # Final density generation
@@ -201,10 +239,12 @@ sskernel <- function(x, tin = NULL, W = NULL, nbs = 0, ncores = getOption("sshis
 #' @title Optimal 2D Kernel Density Estimation (Fixed Bandwidth)
 #' @description Computes the optimal global bandwidth for a 2D kernel density estimate
 #' based on the exact L2 risk (Mean Integrated Squared Error) minimization.
+#' Uses a two-stage search: a logarithmic grid (10 points, auto-expanding) followed
+#' by golden section refinement on the logexp-transformed scale.
 #'
 #' @param x Numeric vector for X coordinates, or a 2-column matrix containing X and Y.
 #' @param y Numeric vector for Y coordinates (required if \code{x} is a vector).
-#' @param W Optional numeric vector of bandwidths to evaluate. If \code{NULL}, a default log-spaced grid is used.
+#' @param W Optional numeric vector of bandwidths to evaluate. If \code{NULL}, a default log-spaced grid (10 pts) with golden section refinement is used.
 #' @param n_grid Integer specifying the number of grid points for the output density matrix (default: 100).
 #' @param ncores Integer. Number of OpenMP threads to use. Defaults to 1 for CRAN compliance.
 #'
@@ -246,10 +286,10 @@ sskernel2d <- function(x, y = NULL, W = NULL, n_grid = 100, ncores = getOption("
     Wmin_limit <- sqrt(bounds[1]) / 10
     Wmax_initial <- sqrt(bounds[2])
 
-    # 2. Starting logarithmic grid of 40 points
+    # 2. Starting logarithmic grid of 10 points
     W_grid <- exp(seq(log(max(sqrt(bounds[1]) / 4, Wmin_limit)),
                       log(Wmax_initial),
-                      length.out = 40))
+                      length.out = 10))
 
     C_vals <- vapply(W_grid, cost_func, numeric(1))
 
@@ -290,8 +330,44 @@ sskernel2d <- function(x, y = NULL, W = NULL, n_grid = 100, ncores = getOption("
       }
     }
 
-    # Extract the final optimum
+    # Extract the coarse optimum
     opt_w_norm <- W_grid[which.min(C_vals)]
+    min_idx <- which.min(C_vals)
+
+    # 4. Golden section refinement on logexp scale
+    left_idx  <- max(1, min_idx - 1)
+    right_idx <- min(length(W_grid), min_idx + 1)
+
+    if (right_idx > left_idx) {
+      phi <- (sqrt(5) + 1) / 2
+      a <- ilogexp(W_grid[left_idx])
+      b <- ilogexp(W_grid[right_idx])
+
+      c1 <- (phi - 1) * a + (2 - phi) * b
+      c2 <- (2 - phi) * a + (phi - 1) * b
+      f1 <- cost_func(logexp(c1))
+      f2 <- cost_func(logexp(c2))
+
+      for (k in seq_len(30)) {
+        if (abs(b - a) <= 1e-5 * (abs(c1) + abs(c2)) && k > 2) break
+
+        if (f1 < f2) {
+          b  <- c2
+          c2 <- c1
+          c1 <- (phi - 1) * a + (2 - phi) * b
+          f2 <- f1
+          f1 <- cost_func(logexp(c1))
+        } else {
+          a  <- c1
+          c1 <- c2
+          c2 <- (2 - phi) * a + (phi - 1) * b
+          f1 <- f2
+          f2 <- cost_func(logexp(c2))
+        }
+      }
+
+      opt_w_norm <- logexp(if (f1 < f2) c1 else c2)
+    }
   }
 
   # Scale optimal bandwidths back to original dimensions

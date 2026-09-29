@@ -77,17 +77,17 @@ test_that("ssvkernel2d density is non-negative and integrates approx to 1", {
 test_that("ssvkernel2d reproduces reference regression values", {
   df  <- read.table("oldfaithful.txt", header = FALSE, col.names = c("eruptions", "waiting"))
   res <- ssvkernel2d(df$eruptions, df$waiting, n_grid = 100L, sensitivity = 0.5)
-  expect_equal(res$pilot_wx, 0.1947, tolerance = 1e-3)
-  expect_equal(res$pilot_wy, 2.319,  tolerance = 1e-3)
-  expect_equal(max(res$z),   0.0525, tolerance = 1e-3)
+  expect_equal(res$pilot_wx, 0.1898, tolerance = 1e-3)
+  expect_equal(res$pilot_wy, 2.2602, tolerance = 1e-3)
+  expect_equal(max(res$z),   0.0532, tolerance = 1e-3)
   expect_equal(min(res$z),   0,      tolerance = 1e-3)
   expect_equal(min(res$x_grid), 1.6, tolerance = 1e-3)
   expect_equal(max(res$x_grid), 5.1, tolerance = 1e-3)
   expect_equal(min(res$y_grid), 43.0, tolerance = 1e-3)
   expect_equal(max(res$y_grid), 96.0, tolerance = 1e-3)
   expect_equal(mean(res$lambda_factors), 1.070, tolerance = 1e-2)
-  expect_equal(min(res$lambda_factors), 0.653, tolerance = 1e-3)
-  expect_equal(max(res$lambda_factors), 3.329, tolerance = 1e-3)
+  expect_equal(min(res$lambda_factors), 0.6518, tolerance = 1e-3)
+  expect_equal(max(res$lambda_factors), 3.294,  tolerance = 1e-3)
 })
 
 # ── S3 methods ────────────────────────────────────────────────────────────────
@@ -111,12 +111,12 @@ test_that("plot.ssvkernel2d runs without error", {
 
 test_that("ssvkernel2d returns expected values for iris pairs", {
   res <- ssvkernel2d(iris$Sepal.Length, iris$Sepal.Width, n_grid = 30)
-  expect_equal(res$pilot_wx, 0.27785, tolerance = 1e-4)
-  expect_equal(res$pilot_wy, 0.14625, tolerance = 1e-4)
+  expect_equal(res$pilot_wx, 0.28782, tolerance = 1e-4)
+  expect_equal(res$pilot_wy, 0.15150, tolerance = 1e-4)
   expect_true(all(res$z >= 0))
 
   res <- ssvkernel2d(iris$Petal.Length, iris$Petal.Width, n_grid = 30)
-  expect_equal(res$pilot_wx, 0.16898, tolerance = 1e-4)
-  expect_equal(res$pilot_wy, 0.07296, tolerance = 1e-4)
+  expect_equal(res$pilot_wx, 0.17007, tolerance = 1e-4)
+  expect_equal(res$pilot_wy, 0.07344, tolerance = 1e-4)
   expect_true(all(res$z >= 0))
 })

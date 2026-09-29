@@ -69,9 +69,9 @@ test_that("sskernel2d density is non-negative and integrates approx to 1", {
 test_that("sskernel2d reproduces reference regression values", {
   df  <- read.table("oldfaithful.txt", header = FALSE, col.names = c("eruptions", "waiting"))
   res <- sskernel2d(df$eruptions, df$waiting, n_grid = 100L)
-  expect_equal(res$opt_wx, 0.1947, tolerance = 1e-3)
-  expect_equal(res$opt_wy, 2.319,  tolerance = 1e-3)
-  expect_equal(max(res$z), 0.0405, tolerance = 1e-3)
+  expect_equal(res$opt_wx, 0.1898, tolerance = 1e-3)
+  expect_equal(res$opt_wy, 2.2602,  tolerance = 1e-3)
+  expect_equal(max(res$z), 0.04094, tolerance = 1e-3)
   expect_equal(min(res$z), 0,      tolerance = 1e-3)
 })
 
@@ -106,10 +106,10 @@ test_that("plot.sskernel2d runs without error", {
 
 test_that("sskernel2d returns expected values for iris pairs", {
   res <- sskernel2d(iris$Sepal.Length, iris$Sepal.Width, n_grid = 30)
-  expect_equal(res$opt_wx, 0.27785, tolerance = 1e-4)
-  expect_equal(res$opt_wy, 0.14625, tolerance = 1e-4)
+  expect_equal(res$opt_wx, 0.28782, tolerance = 1e-4)
+  expect_equal(res$opt_wy, 0.15150, tolerance = 1e-4)
 
   res <- sskernel2d(iris$Petal.Length, iris$Petal.Width, n_grid = 30)
-  expect_equal(res$opt_wx, 0.16898, tolerance = 1e-4)
-  expect_equal(res$opt_wy, 0.07296, tolerance = 1e-4)
+  expect_equal(res$opt_wx, 0.17007, tolerance = 1e-4)
+  expect_equal(res$opt_wy, 0.07344, tolerance = 1e-4)
 })

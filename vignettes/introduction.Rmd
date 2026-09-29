@@ -29,7 +29,7 @@ The `sshist` package provides a suite of tools for optimal density estimation ba
 
 These methods are particularly useful when data exhibits multimodal structure, because naive rules (Sturges, Freedman–Diaconis) tend to over- or under-smooth. 
 
-*Note: The package supports OpenMP C++ multithreading and parallel bootstrapping out of the box. For CRAN compliance, it defaults to 1 core. You can globally increase this by setting the option below.*
+*Note: The package supports OpenMP C++ multithreading (2D kernel cost evaluation, multi-start gamma optimization) and parallel bootstrapping out of the box. For CRAN compliance, it defaults to 1 core. You can globally increase this by setting the option below.*
 
 ```{r setup, message=FALSE, warning=FALSE}
 library(sshist)
@@ -85,17 +85,17 @@ plot(res)
 
 ## 2. Optimal 1D Kernel Density: `sskernel` & `ssvkernel`
 
-For smooth continuous distributions, `sskernel` evaluates a single fixed global bandwidth, while `ssvkernel` computes locally adaptive bandwidths based on Abramson's square-root scaling law. Both use a fast FFT implementation.
+For smooth continuous distributions, `sskernel` estimates a single fixed global bandwidth via a two-stage search: a logarithmic grid (10 points, auto-expanding) followed by golden section refinement. `ssvkernel` computes locally adaptive bandwidths based on Abramson's square-root scaling law. Both use a fast FFT implementation.
 
 **Complete Parameter List:**
 
 * `x`: Numeric vector of sample data.
 * `tin`: Optional numeric vector specifying the grid of evaluation points. If `NULL`, a grid is generated automatically.
-* `W` *(sskernel only)*: Optional numeric vector of bandwidths to evaluate. If provided, the internal grid search is skipped.
+* `W` *(sskernel only)*: Optional numeric vector of bandwidths to evaluate. If provided, the internal grid search (10 pts + golden section) is skipped.
 * `M` *(ssvkernel only)*: Integer. Number of bandwidths to examine during the adaptive process (default `80`).
 * `WinFunc` *(ssvkernel only)*: Character string specifying the window function for local weights. Options: `"Gauss"`, `"Boxcar"` (default), `"Laplace"`, or `"Cauchy"`.
 * `nbs`: Integer. Number of bootstrap samples for calculating confidence intervals. Set to `0` to skip (default `0`).
-* `ncores`: Integer. Number of CPU cores to use for parallel bootstrapping (default 1L or via getOption(`"sshist.ncores"`, 1L)).
+* `ncores`: Integer. Number of CPU cores to use for C++/OpenMP gamma optimization and parallel bootstrapping (default 1L or via `getOption("sshist.ncores", 1L)`).
 
 ### Fixed Global Bandwidth (`sskernel`)
 
@@ -109,7 +109,7 @@ plot(res_k, xlab = "Eruption duration (min)")
 
 ### Locally Adaptive Bandwidth (`ssvkernel`)
 
-Uses a stiffness parameter `gamma` (optimized via MISE) to control how much the bandwidth can vary locally. A Nadaraya–Watson smoother with the selected window function (`WinFunc`) stabilizes the bandwidth sequence.
+Uses a stiffness parameter `gamma` (optimized via multi-start golden section search over GS-based intervals, accelerated with C++/OpenMP) to control how much the bandwidth can vary locally. A Nadaraya–Watson smoother with the selected window function (`WinFunc`) stabilizes the bandwidth sequence.
 
 ```{r ssvkernel, fig.height = 4}
 res_sv <- ssvkernel(x_data)
@@ -180,12 +180,12 @@ plot(res_2d, xlab = "Waiting time (min)", ylab = "Eruption duration (min)")
 
 * `x`: Numeric vector for X coordinates, or a 2-column matrix containing X and Y.
 * `y`: Numeric vector for Y coordinates (required if `x` is a vector).
-* `W` *(sskernel2d only)*: Optional numeric vector of bandwidths to evaluate. If `NULL`, a smart log-spaced grid is used.
+* `W` *(sskernel2d only)*: Optional numeric vector of bandwidths to evaluate. If `NULL`, a log-spaced grid (10 points, auto-expanding) with golden section refinement is used.
 * `n_grid`: Integer specifying the resolution of the output density matrix (default `100`).
 * `sensitivity` *(ssvkernel2d only)*: Numeric scalar controlling the sensitivity of local bandwidths to the pilot density. A value of `0.5` (default) corresponds to Abramson's inverse square-root law.
 * `ncores`: Integer. Number of OpenMP threads to use for the heavy C++ 2D grid computations.
 
-**`sskernel2d`** finds the globally optimal isotropic bandwidth. To handle variables on different scales, the data are internally standardized before optimization; the resulting bandwidth is then rescaled back to each original axis.
+**`sskernel2d`** finds the globally optimal isotropic bandwidth via a two-stage search: a logarithmic grid (10 points, auto-expanding) followed by golden section refinement on the logexp-transformed scale. To handle variables on different scales, the data are internally standardized before optimization; the resulting bandwidth is then rescaled back to each original axis.
 
 ```{r kde2d-fixed, fig.width = 6, fig.height = 6}
 df <- faithful   # eruptions: ~2-5 min,  waiting: ~40-90 min

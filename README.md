@@ -22,7 +22,7 @@ By utilizing purely data-driven optimization, this package avoids subjective cho
 - **Data-Driven Optimization:** Replaces subjective "rules of thumb" (like Sturges' or Freedman-Diaconis' rules) with objective minimizers of the MISE cost function.
 - **Multi-Dimensional Support:** Provides full capability for both 1D univariate and 2D bivariate distributions.
 - **Fixed and Variable Estimators:** Offers both classical global estimators and advanced locally adaptive variable bandwidth selectors (based on Abramson's scaling method).
-- **High Performance:** Designed to evaluate cost functions efficiently, leveraging analytical formulations and fast backend calculations.
+- **High Performance:** C++/OpenMP-accelerated backend for histogram costs, 2D kernel grids, and multi-start gamma optimization with parallel golden section search. Bootstrap also supports parallel execution.
 
 ## Summary of Available Functions
 

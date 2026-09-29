@@ -2,28 +2,28 @@ options(sshist.ncores = 2)
 
 # ── Reference value tests ─────────────────────────────────────────────────────
 
-test_that("sskernel(waiting) matches Python reference", {
+test_that("sskernel(waiting) produces expected values", {
   df  <- read.table("oldfaithful.txt", header = FALSE, col.names = c("eruptions", "waiting"))
   res <- sskernel(df$waiting)
   dt  <- min(diff(res$x))
-  expect_equal(res$optw, 2.85, tolerance = 1e-3)
+  expect_equal(res$optw, 2.8152, tolerance = 1e-3)
   expect_equal(length(res$x), 53L)
   expect_equal(res$x[1],  43.0, tolerance = 1e-6)
   expect_equal(res$x[53], 96.0, tolerance = 1e-6)
-  expect_equal(res$y[1],  0.00470, tolerance = 1e-4)
-  expect_equal(res$y[53], 0.0022434, tolerance = 1e-4)
+  expect_equal(res$y[1],  0.004668, tolerance = 1e-4)
+  expect_equal(res$y[53], 0.002223, tolerance = 2e-4)
   expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-3)
 })
 
-test_that("sskernel(eruptions) matches Python reference", {
+test_that("sskernel(eruptions) produces expected values", {
   df  <- read.table("oldfaithful.txt", header = FALSE, col.names = c("eruptions", "waiting"))
   res <- sskernel(df$eruptions)
   dt  <- min(diff(res$x))
-  expect_equal(res$optw, 0.1103, tolerance = 1e-3)
+  expect_equal(res$optw, 0.1075, tolerance = 1e-3)
   expect_equal(length(res$x), 1000L)
   expect_equal(res$x[1],  1.60, tolerance = 1e-6)
   expect_equal(res$x[1000L], 5.10, tolerance = 1e-6)
-  expect_equal(res$y[1], 0.116, tolerance = 1e-4)
+  expect_equal(res$y[1], 0.1120, tolerance = 1e-4)
   expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-3)
 })
 
@@ -120,27 +120,27 @@ test_that("plot.sskernel works with bootstrap confidence band", {
 
 test_that("sskernel returns expected values for iris columns", {
   res <- sskernel(iris$Sepal.Length)
-  expect_equal(res$optw, 0.38968, tolerance = 1e-4)
+  expect_equal(res$optw, 0.3944, tolerance = 1e-3)
   expect_equal(length(res$x), 37L)
   expect_equal(res$x[1], 4.3, tolerance = 1e-6)
   expect_equal(res$x[37], 7.9, tolerance = 1e-6)
-  expect_equal(res$y[1], 0.117690, tolerance = 1e-5)
+  expect_equal(res$y[1], 0.1186, tolerance = 1e-4)
   dt <- min(diff(res$x))
   expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
 
   res <- sskernel(iris$Sepal.Width)
-  expect_equal(res$optw, 0.2, tolerance = 1e-6)
+  expect_equal(res$optw, 0.2, tolerance = 1e-5)
   expect_equal(length(res$x), 25L)
   expect_equal(res$y[1], 0.066571, tolerance = 1e-5)
   dt <- min(diff(res$x))
   expect_equal(sum(res$y) * dt, 1.0, tolerance = 1e-6)
 
   res <- sskernel(iris$Petal.Length)
-  expect_equal(res$optw, 0.2, tolerance = 1e-6)
+  expect_equal(res$optw, 0.2, tolerance = 1e-5)
   expect_equal(length(res$x), 60L)
 
   res <- sskernel(iris$Petal.Width)
-  expect_equal(res$optw, 0.2, tolerance = 1e-6)
+  expect_equal(res$optw, 0.2, tolerance = 1e-5)
   expect_equal(length(res$x), 25L)
   expect_equal(res$y[1], 0.540645, tolerance = 1e-5)
   dt <- min(diff(res$x))

@@ -24,7 +24,7 @@ ssvkernel(
 
 \item{nbs}{Integer, number of bootstrap samples for confidence intervals. Set to 0 to skip (default: 0).}
 
-\item{ncores}{Integer specifying the number of CPU cores to use for bootstrap (default: 1).}
+\item{ncores}{Integer specifying the number of CPU cores to use for C++/OpenMP gamma optimization and bootstrap (default: 1).}
 }
 \value{
 An object of class \code{"ssvkernel"} containing:
@@ -42,5 +42,6 @@ An object of class \code{"ssvkernel"} containing:
 \description{
 Computes locally adaptive bandwidths for 1D distributions
 following the method of Shimazaki & Shinomoto (2010). Optimizes the
-stiffness constant gamma via a hybrid grid and Brent search on the MISE cost.
+stiffness constant gamma via a multi-start (K=5) golden section search
+over GS-based intervals, accelerated with C++/OpenMP parallelization.
 }
