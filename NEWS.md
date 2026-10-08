@@ -1,3 +1,26 @@
+# sshist 0.2.5.1
+
+## Bug Fixes
+
+* `plot.sshist_2d()`: the default plot title was built with a Unicode
+  multiplication sign (U+00D7). On devices using PDF-family encodings (e.g.
+  `pdf()`, which `R CMD check` uses for its examples and tests) this aborted with
+  `conversion failure on '...' in 'mbcsToSbcs'`. The title now uses an ASCII `x`,
+  so `plot()` works on all graphics devices. This removes the only ERROR
+  reported by `R CMD check`.
+
+## Housekeeping
+
+* `inst/WORDLIST`: added the package's technical vocabulary (`MVFFT`, `logexp`,
+  `optimisation`, `parallelization`, `frontmatter`, `pts`) and dropped stale
+  entries (`getOption`, typographic-apostrophe variants of `Abramson`,
+  `Diaconis`, `Sturges`, `Colour`). `spelling::spell_check_package()` now
+  reports no typos.
+
+## Testing
+
+* Test suite: 277 PASS | 0 FAIL | 0 ERROR | 0 WARN | 0 SKIP.
+
 # sshist 0.2.5
 
 ## Bug Fixes

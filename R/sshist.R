@@ -378,7 +378,7 @@ plot.sshist_2d <- function(x, ...) {
   if (!"xlab" %in% names(dots)) dots$xlab <- "X"
   if (!"ylab" %in% names(dots)) dots$ylab <- "Y"
   if (!"main" %in% names(dots)) {
-    dots$main <- sprintf("Shimazaki-Shinomoto 2D Histogram (%d \u00d7 %d bins)", nx, ny)
+    dots$main <- sprintf("Shimazaki-Shinomoto 2D Histogram (%d x %d bins)", nx, ny)
   }
   dots$x <- x_mids
   dots$y <- y_mids
